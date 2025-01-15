@@ -56,7 +56,10 @@ class VerticalSeekBar @JvmOverloads constructor(context: Context, attrs: Attribu
         }
 
     init {
-        applyTint(context.accentColor)
+        if (!isInEditMode) {
+            applyTint(context.accentColor)
+        }
+        @Suppress("DEPRECATION")
         ViewCompat.setLayoutDirection(this, ViewCompat.LAYOUT_DIRECTION_LTR)
 
         if (attrs != null) {
@@ -69,7 +72,7 @@ class VerticalSeekBar @JvmOverloads constructor(context: Context, attrs: Attribu
         }
     }
 
-    override fun setThumb(thumb: Drawable) {
+    override fun setThumb(thumb: Drawable?) {
         mThumb = thumb
         super.setThumb(thumb)
     }
@@ -210,13 +213,16 @@ class VerticalSeekBar @JvmOverloads constructor(context: Context, attrs: Attribu
                     direction = if (mRotationAngle == ROTATION_ANGLE_CW_90) 1 else -1
                     handled = true
                 }
+
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     direction = if (mRotationAngle == ROTATION_ANGLE_CW_270) 1 else -1
                     handled = true
                 }
+
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT ->
                     // move view focus to previous/next view
                     return false
+
                 else -> handled = false
             }
 
@@ -256,7 +262,7 @@ class VerticalSeekBar @JvmOverloads constructor(context: Context, attrs: Attribu
                 )
                 m.isAccessible = true
                 mMethodSetProgressFromUser = m
-            } catch (e: NoSuchMethodException) {
+            } catch (_: NoSuchMethodException) {
             }
 
         }
@@ -264,9 +270,9 @@ class VerticalSeekBar @JvmOverloads constructor(context: Context, attrs: Attribu
         if (mMethodSetProgressFromUser != null) {
             try {
                 mMethodSetProgressFromUser!!.invoke(this, progress, fromUser)
-            } catch (e: IllegalArgumentException) {
-            } catch (e: IllegalAccessException) {
-            } catch (e: InvocationTargetException) {
+            } catch (_: IllegalArgumentException) {
+            } catch (_: IllegalAccessException) {
+            } catch (_: InvocationTargetException) {
             }
 
         } else {
@@ -308,6 +314,7 @@ class VerticalSeekBar @JvmOverloads constructor(context: Context, attrs: Attribu
                     canvas.rotate(90f)
                     canvas.translate(0f, (-super.getWidth()).toFloat())
                 }
+
                 ROTATION_ANGLE_CW_270 -> {
                     canvas.rotate(-90f)
                     canvas.translate((-super.getHeight()).toFloat(), 0f)

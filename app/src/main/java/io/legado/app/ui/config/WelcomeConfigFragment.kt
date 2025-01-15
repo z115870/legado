@@ -13,6 +13,7 @@ import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.BookCover
 import io.legado.app.utils.*
+import splitties.init.appCtx
 import java.io.FileOutputStream
 
 class WelcomeConfigFragment : PreferenceFragment(),
@@ -39,7 +40,6 @@ class WelcomeConfigFragment : PreferenceFragment(),
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.welcome_style)
         listView.setEdgeEffectColor(primaryColor)
-        setHasOptionsMenu(true)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -120,12 +120,20 @@ class WelcomeConfigFragment : PreferenceFragment(),
 
     private fun setCoverFromUri(preferenceKey: String, uri: Uri) {
         readUri(uri) { fileDoc, inputStream ->
-            var file = requireContext().externalFiles
-            file = FileUtils.createFileIfNotExist(file, "covers", fileDoc.name)
-            FileOutputStream(file).use {
-                inputStream.copyTo(it)
+            kotlin.runCatching {
+                var file = requireContext().externalFiles
+                val suffix = fileDoc.name.substringAfterLast(".")
+                val fileName = uri.inputStream(requireContext()).getOrThrow().use {
+                    MD5Utils.md5Encode(it) + ".$suffix"
+                }
+                file = FileUtils.createFileIfNotExist(file, "covers", fileName)
+                FileOutputStream(file).use {
+                    inputStream.copyTo(it)
+                }
+                putPrefString(preferenceKey, file.absolutePath)
+            }.onFailure {
+                appCtx.toastOnUi(it.localizedMessage)
             }
-            putPrefString(preferenceKey, file.absolutePath)
         }
     }
 

@@ -4,9 +4,9 @@ import android.content.Context
 import android.os.Bundle
 import android.view.ViewGroup
 import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ItemBookshelfGridBinding
+import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.invisible
 import splitties.views.onLongClick
@@ -24,28 +24,30 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
         item: Book,
         payloads: MutableList<Any>
     ) = binding.run {
-        val bundle = payloads.getOrNull(0) as? Bundle
-        if (bundle == null) {
+        if (payloads.isEmpty()) {
             tvName.text = item.name
             ivCover.load(item.getDisplayCover(), item.name, item.author, false, item.origin)
             upRefresh(binding, item)
         } else {
-            bundle.keySet().forEach {
-                when (it) {
-                    "name" -> tvName.text = item.name
-                    "cover" -> ivCover.load(item.getDisplayCover(), item.name, item.author, false, item.origin)
-                    "refresh" -> upRefresh(binding, item)
+            for (i in payloads.indices) {
+                val bundle = payloads[i] as Bundle
+                bundle.keySet().forEach {
+                    when (it) {
+                        "name" -> tvName.text = item.name
+                        "cover" -> ivCover.load(item.getDisplayCover(), item.name, item.author, false, item.origin)
+                        "refresh" -> upRefresh(binding, item)
+                    }
                 }
             }
         }
     }
 
     private fun upRefresh(binding: ItemBookshelfGridBinding, item: Book) {
-        if (item.origin != BookType.local && callBack.isUpdate(item.bookUrl)) {
+        if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
             binding.bvUnread.invisible()
-            binding.rlLoading.show()
+            binding.rlLoading.visible()
         } else {
-            binding.rlLoading.hide()
+            binding.rlLoading.inVisible()
             if (AppConfig.showUnread) {
                 binding.bvUnread.setBadgeCount(item.getUnreadChapterNum())
                 binding.bvUnread.setHighlight(item.lastCheckCount > 0)

@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.config
 
 import android.content.DialogInterface
+import android.graphics.PorterDuff
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -48,20 +49,24 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
-        (activity as ReadBookActivity).bottomDialog++
+        val bottomDialog = (activity as ReadBookActivity).bottomDialog++
+        if (bottomDialog > 0) {
+            dismiss()
+            return
+        }
         val bg = requireContext().bottomBackground
         val isLight = ColorUtils.isColorLight(bg)
         val textColor = requireContext().getPrimaryTextColor(isLight)
         root.setBackgroundColor(bg)
         tvReadSpeedTitle.setTextColor(textColor)
         tvReadSpeed.setTextColor(textColor)
-        ivCatalog.setColorFilter(textColor)
+        ivCatalog.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvCatalog.setTextColor(textColor)
-        ivMainMenu.setColorFilter(textColor)
+        ivMainMenu.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvMainMenu.setTextColor(textColor)
-        ivAutoPageStop.setColorFilter(textColor)
+        ivAutoPageStop.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvAutoPageStop.setTextColor(textColor)
-        ivSetting.setColorFilter(textColor)
+        ivSetting.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvSetting.setTextColor(textColor)
         initOnChange()
         initData()
@@ -103,7 +108,9 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
         binding.llCatalog.setOnClickListener { callBack?.openChapterList() }
         binding.llAutoPageStop.setOnClickListener {
             callBack?.autoPageStop()
-            dismissAllowingStateLoss()
+            binding.llAutoPageStop.post {
+                dismissAllowingStateLoss()
+            }
         }
     }
 

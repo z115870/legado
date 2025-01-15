@@ -33,6 +33,7 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
 
     inline fun <reified T : Fragment> replaceFragment(configTag: String) {
         intent.putExtra("configTag", configTag)
+        @Suppress("DEPRECATION")
         val configFragment = supportFragmentManager.findFragmentByTag(configTag)
             ?: T::class.java.newInstance()
         supportFragmentManager.beginTransaction()
@@ -44,16 +45,6 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
         super.observeLiveBus()
         observeEvent<String>(EventBus.RECREATE) {
             recreate()
-        }
-    }
-
-    override fun finish() {
-        if (supportFragmentManager.findFragmentByTag(ConfigTag.COVER_CONFIG) != null
-            || supportFragmentManager.findFragmentByTag(ConfigTag.WELCOME_CONFIG) != null
-        ) {
-            replaceFragment<ThemeConfigFragment>(ConfigTag.THEME_CONFIG)
-        } else {
-            super.finish()
         }
     }
 

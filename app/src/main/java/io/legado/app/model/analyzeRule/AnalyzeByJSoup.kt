@@ -3,6 +3,7 @@ package io.legado.app.model.analyzeRule
 import androidx.annotation.Keep
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import org.jsoup.parser.Parser
 import org.jsoup.select.Collector
 import org.jsoup.select.Elements
 import org.jsoup.select.Evaluator
@@ -14,19 +15,27 @@ import org.seimicrawler.xpath.JXNode
  */
 @Keep
 class AnalyzeByJSoup(doc: Any) {
+
     companion object {
-
-        fun parse(doc: Any): Element {
-            return when (doc) {
-                is Element -> doc
-                is JXNode -> if (doc.isElement) doc.asElement() else Jsoup.parse(doc.toString())
-                else -> Jsoup.parse(doc.toString())
-            }
-        }
-
+        private val nullSet = setOf(null)
     }
 
     private var element: Element = parse(doc)
+
+    private fun parse(doc: Any): Element {
+        if (doc is Element) {
+            return doc
+        }
+        if (doc is JXNode) {
+            return if (doc.isElement) doc.asElement() else Jsoup.parse(doc.toString())
+        }
+        kotlin.runCatching {
+            if (doc.toString().startsWith("<?xml", true)) {
+                return Jsoup.parse(doc.toString(), Parser.xmlParser())
+            }
+        }
+        return Jsoup.parse(doc.toString())
+    }
 
     /**
      * 获取列表
@@ -36,9 +45,20 @@ class AnalyzeByJSoup(doc: Any) {
     /**
      * 合并内容列表,得到内容
      */
-    internal fun getString(ruleStr: String) =
-        if (ruleStr.isEmpty()) null
-        else getStringList(ruleStr).takeIf { it.isNotEmpty() }?.joinToString("\n")
+    internal fun getString(ruleStr: String): String? {
+        if (ruleStr.isEmpty()) {
+            return null
+        }
+        val list = getStringList(ruleStr)
+        if (list.isEmpty()) {
+            return null
+        }
+        if (list.size == 1) {
+            return list.first()
+        }
+        return list.joinToString("\n")
+    }
+
 
     /**
      * 获取一个字符串
@@ -215,6 +235,7 @@ class AnalyzeByJSoup(doc: Any) {
                     textS.add(text)
                 }
             }
+
             "textNodes" -> for (element in elements) {
                 val tn = arrayListOf<String>()
                 val contentEs = element.textNodes()
@@ -228,12 +249,14 @@ class AnalyzeByJSoup(doc: Any) {
                     textS.add(tn.joinToString("\n"))
                 }
             }
+
             "ownText" -> for (element in elements) {
                 val text = element.ownText()
                 if (text.isNotEmpty()) {
                     textS.add(text)
                 }
             }
+
             "html" -> {
                 elements.select("script").remove()
                 elements.select("style").remove()
@@ -242,6 +265,7 @@ class AnalyzeByJSoup(doc: Any) {
                     textS.add(html)
                 }
             }
+
             "all" -> textS.add(elements.outerHtml())
             else -> for (element in elements) {
 
@@ -298,7 +322,7 @@ class AnalyzeByJSoup(doc: Any) {
                 }
 
             val len = elements.size
-            val lastIndexes = (indexDefault.size - 1).takeIf { it != -1 } ?: indexes.size - 1
+            val lastIndexes = (indexDefault.size - 1).takeIf { it != -1 } ?: (indexes.size - 1)
             val indexSet = mutableSetOf<Int>()
 
             /**
@@ -354,7 +378,7 @@ class AnalyzeByJSoup(doc: Any) {
 
                 for (pcInt in indexSet) elements[pcInt] = null
 
-                elements.removeAll(listOf(null)) //测试过，这样就行
+                elements.removeAll(nullSet) //测试过，这样就行
 
             } else if (split == '.') { //选择
 
@@ -470,7 +494,6 @@ class AnalyzeByJSoup(doc: Any) {
                     l = "" //清空
                     curMinus = false //重置
                 }
-
             }
 
             split = ' '

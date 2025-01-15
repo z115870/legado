@@ -6,22 +6,43 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Picture
 import android.os.Build
 import android.text.Html
+import android.view.MotionEvent
 import android.view.View
-import android.view.View.*
-import android.widget.*
+import android.view.View.GONE
+import android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+import android.view.View.INVISIBLE
+import android.view.View.VISIBLE
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.widget.EdgeEffect
+import android.widget.EditText
+import android.widget.RadioGroup
+import android.widget.SeekBar
+import android.widget.TextView
 import androidx.annotation.ColorInt
+import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.menu.MenuPopupHelper
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.graphics.record
+import androidx.core.graphics.withTranslation
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.get
+import androidx.core.view.marginBottom
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager.widget.ViewPager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.TintHelper
+import io.legado.app.utils.canvasrecorder.CanvasRecorder
+import io.legado.app.utils.canvasrecorder.record
 import splitties.systemservices.inputMethodManager
-
+import splitties.views.bottomPadding
+import splitties.views.topPadding
 import java.lang.reflect.Field
 
 
@@ -41,6 +62,11 @@ fun View.hideSoftInput() = run {
     inputMethodManager.hideSoftInputFromWindow(this.windowToken, 0)
 }
 
+fun EditText.showSoftInput() = run {
+    requestFocus()
+    inputMethodManager.showSoftInput(this, InputMethodManager.RESULT_SHOWN)
+}
+
 fun View.disableAutoFill() = run {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         this.importantForAutofill = IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
@@ -49,7 +75,7 @@ fun View.disableAutoFill() = run {
 
 fun View.applyTint(
     @ColorInt color: Int,
-    isDark: Boolean = AppConfig.isNightTheme(context)
+    isDark: Boolean = AppConfig.isNightTheme
 ) {
     TintHelper.setTintAuto(this, color, false, isDark)
 }
@@ -126,17 +152,49 @@ fun View.visible(visible: Boolean) {
     }
 }
 
-fun View.screenshot(): Bitmap? {
+fun View.screenshot(bitmap: Bitmap? = null, canvas: Canvas? = null): Bitmap? {
     return if (width > 0 && height > 0) {
-        val screenshot = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val c = Canvas(screenshot)
+        val screenshot = if (bitmap != null && bitmap.width == width && bitmap.height == height) {
+            bitmap.eraseColor(Color.TRANSPARENT)
+            bitmap
+        } else {
+            bitmap?.recycle()
+            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        }
+        val c = canvas ?: Canvas()
+        c.setBitmap(screenshot)
+        c.save()
         c.translate(-scrollX.toFloat(), -scrollY.toFloat())
         this.draw(c)
+        c.restore()
         c.setBitmap(null)
+        screenshot.prepareToDraw()
         screenshot
     } else {
         null
     }
+}
+
+fun View.screenshot(picture: Picture) {
+    if (width > 0 && height > 0) {
+        picture.record(width, height) {
+            withTranslation(-scrollX.toFloat(), -scrollY.toFloat()) {
+                draw(this)
+            }
+        }
+    }
+}
+
+fun View.screenshot(canvasRecorder: CanvasRecorder) {
+    if (width > 0 && height > 0) {
+        canvasRecorder.record(width, height) {
+            draw(this)
+        }
+    }
+}
+
+fun View.setPaddingBottom(bottom: Int) {
+    setPadding(paddingLeft, paddingTop, paddingRight, bottom)
 }
 
 fun SeekBar.progressAdd(int: Int) {
@@ -165,12 +223,19 @@ fun RadioGroup.checkByIndex(index: Int) {
     check(get(index).id)
 }
 
+@SuppressLint("ObsoleteSdkInt")
 fun TextView.setHtml(html: String) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
         text = Html.fromHtml(html, Html.FROM_HTML_MODE_COMPACT)
     } else {
         @Suppress("DEPRECATION")
         text = Html.fromHtml(html)
+    }
+}
+
+fun TextView.setTextIfNotEqual(charSequence: CharSequence?) {
+    if (text != charSequence) {
+        text = charSequence
     }
 }
 
@@ -183,4 +248,53 @@ fun PopupMenu.show(x: Int, y: Int) {
     }.onFailure {
         it.printOnDebug()
     }
+}
+
+fun View.shouldHideSoftInput(event: MotionEvent): Boolean {
+    if (this is EditText) {
+        val l = intArrayOf(0, 0)
+        getLocationInWindow(l)
+        val left = l[0]
+        val top = l[1]
+        val bottom = top + getHeight()
+        val right = left + getWidth()
+        return !(event.x > left && event.x < right && event.y > top && event.y < bottom)
+    }
+    return false
+}
+
+fun View.applyStatusBarPadding(withInitialPadding: Boolean = false) {
+    val initialPadding = if (withInitialPadding) topPadding else 0
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
+        val insets = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
+        topPadding = initialPadding + insets.top
+        windowInsets
+    }
+}
+
+fun View.applyNavigationBarPadding(withInitialPadding: Boolean = false) {
+    val initialPadding = if (withInitialPadding) bottomPadding else 0
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
+        bottomPadding = initialPadding + windowInsets.navigationBarHeight
+        windowInsets
+    }
+}
+
+fun View.applyNavigationBarMargin(withInitialMargin: Boolean = false) {
+    val initialMargin = if (withInitialMargin) marginBottom else 0
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
+        val lp = layoutParams as ViewGroup.MarginLayoutParams
+        lp.bottomMargin = initialMargin + windowInsets.navigationBarHeight
+        layoutParams = lp
+        windowInsets
+    }
+}
+
+fun View.setBackgroundKeepPadding(@DrawableRes backgroundResId: Int) {
+    val paddingLeft = paddingLeft
+    val paddingTop = paddingTop
+    val paddingRight = paddingRight
+    val paddingBottom = paddingBottom
+    setBackgroundResource(backgroundResId)
+    setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
 }

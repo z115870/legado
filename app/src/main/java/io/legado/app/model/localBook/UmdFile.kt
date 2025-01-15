@@ -2,11 +2,11 @@ package io.legado.app.model.localBook
 
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
-import io.legado.app.utils.*
+import io.legado.app.utils.DebugLog
+import io.legado.app.utils.FileUtils
+import io.legado.app.utils.printOnDebug
 import me.ag2s.umdlib.domain.UmdBook
 import me.ag2s.umdlib.umd.UmdReader
-import splitties.init.appCtx
-
 import java.io.File
 import java.io.InputStream
 
@@ -59,24 +59,8 @@ class UmdFile(var book: Book) {
             return field
         }
 
-
     init {
-        try {
-            umdBook?.let {
-                if (book.coverUrl.isNullOrEmpty()) {
-                    book.coverUrl = FileUtils.getPath(
-                        appCtx.externalFiles,
-                        "covers",
-                        "${MD5Utils.md5Encode16(book.bookUrl)}.jpg"
-                    )
-                }
-                if (!File(book.coverUrl!!).exists()) {
-                    FileUtils.writeBytes(book.coverUrl!!, it.cover.coverData)
-                }
-            }
-        } catch (e: Exception) {
-            e.printOnDebug()
-        }
+        upBookCover(true)
     }
 
     private fun readUmd(): UmdBook? {
@@ -84,11 +68,28 @@ class UmdFile(var book: Book) {
         return UmdReader().read(input)
     }
 
+    private fun upBookCover(fastCheck: Boolean = false) {
+        try {
+            umdBook?.let {
+                if (book.coverUrl.isNullOrEmpty()) {
+                    book.coverUrl = LocalBook.getCoverPath(book)
+                }
+                if (fastCheck && File(book.coverUrl!!).exists()) {
+                    return
+                }
+                FileUtils.writeBytes(book.coverUrl!!, it.cover.coverData)
+            }
+        } catch (e: Exception) {
+            e.printOnDebug()
+        }
+    }
+
     private fun upBookInfo() {
         if (umdBook == null) {
             uFile = null
             book.intro = "书籍导入异常"
         } else {
+            upBookCover()
             val hd = umdBook!!.header
             book.name = hd.title
             book.author = hd.author
@@ -112,8 +113,6 @@ class UmdFile(var book: Book) {
             DebugLog.d(javaClass.name, chapter.url)
             chapterList.add(chapter)
         }
-        book.latestChapterTitle = chapterList.lastOrNull()?.title
-        book.totalChapterNum = chapterList.size
         return chapterList
     }
 

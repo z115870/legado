@@ -3,9 +3,11 @@ package io.legado.app.ui.book.toc
 import android.annotation.SuppressLint
 import android.app.Activity.RESULT_OK
 import android.content.Intent
+import android.graphics.PorterDuff
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.EventBus
@@ -13,12 +15,15 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.databinding.FragmentChapterListBinding
-import io.legado.app.help.BookHelp
+import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.ui.widget.recycler.UpLinearLayoutManager
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CoroutineScope
@@ -43,8 +48,8 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         val btc = requireContext().getPrimaryTextColor(ColorUtils.isColorLight(bbg))
         llChapterBaseInfo.setBackgroundColor(bbg)
         tvCurrentChapterInfo.setTextColor(btc)
-        ivChapterTop.setColorFilter(btc)
-        ivChapterBottom.setColorFilter(btc)
+        ivChapterTop.setColorFilter(btc, PorterDuff.Mode.SRC_IN)
+        ivChapterBottom.setColorFilter(btc, PorterDuff.Mode.SRC_IN)
         initRecyclerView()
         initView()
         viewModel.bookData.observe(this@ChapterListFragment) {
@@ -70,21 +75,22 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         tvCurrentChapterInfo.setOnClickListener {
             mLayoutManager.scrollToPositionWithOffset(durChapterIndex, 0)
         }
+        binding.llChapterBaseInfo.applyNavigationBarMargin()
     }
 
     @SuppressLint("SetTextI18n")
     private fun initBook(book: Book) {
-        launch {
+        lifecycleScope.launch {
             upChapterList(null)
             durChapterIndex = book.durChapterIndex
             binding.tvCurrentChapterInfo.text =
-                "${book.durChapterTitle}(${book.durChapterIndex + 1}/${book.totalChapterNum})"
+                "${book.durChapterTitle}(${book.durChapterIndex + 1}/${book.simulatedTotalChapterNum()})"
             initCacheFileNames(book)
         }
     }
 
     private fun initCacheFileNames(book: Book) {
-        launch(IO) {
+        lifecycleScope.launch(IO) {
             adapter.cacheFileNames.addAll(BookHelp.getChapterFiles(book))
             withContext(Main) {
                 adapter.notifyItemRangeChanged(0, adapter.itemCount, true)
@@ -93,9 +99,9 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     }
 
     override fun observeLiveBus() {
-        observeEvent<BookChapter>(EventBus.SAVE_CONTENT) { chapter ->
+        observeEvent<Pair<Book, BookChapter>>(EventBus.SAVE_CONTENT) { (book, chapter) ->
             viewModel.bookData.value?.bookUrl?.let { bookUrl ->
-                if (chapter.bookUrl == bookUrl) {
+                if (book.bookUrl == bookUrl) {
                     adapter.cacheFileNames.add(chapter.getFileName())
                     if (viewModel.searchKey.isNullOrEmpty()) {
                         adapter.notifyItemChanged(chapter.index, true)
@@ -112,11 +118,14 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     }
 
     override fun upChapterList(searchKey: String?) {
-        launch {
+        lifecycleScope.launch {
             withContext(IO) {
+                val end = (book?.simulatedTotalChapterNum() ?: Int.MAX_VALUE) - 1
                 when {
-                    searchKey.isNullOrBlank() -> appDb.bookChapterDao.getChapterList(viewModel.bookUrl)
-                    else -> appDb.bookChapterDao.search(viewModel.bookUrl, searchKey)
+                    searchKey.isNullOrBlank() ->
+                        appDb.bookChapterDao.getChapterList(viewModel.bookUrl, 0, end)
+
+                    else -> appDb.bookChapterDao.search(viewModel.bookUrl, searchKey, 0, end)
                 }
             }.let {
                 adapter.setItems(it)
@@ -125,7 +134,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     }
 
     override fun onListChanged() {
-        launch {
+        lifecycleScope.launch {
             var scrollPos = 0
             withContext(Default) {
                 adapter.getItems().forEachIndexed { index, bookChapter ->
@@ -145,14 +154,18 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         adapter.upDisplayTitles(mLayoutManager.findFirstVisibleItemPosition())
     }
 
+    override fun upAdapter() {
+        adapter.notifyItemRangeChanged(0, adapter.itemCount)
+    }
+
     override val scope: CoroutineScope
-        get() = this
+        get() = lifecycleScope
 
     override val book: Book?
         get() = viewModel.bookData.value
 
     override val isLocalBook: Boolean
-        get() = viewModel.bookData.value?.isLocalBook() == true
+        get() = viewModel.bookData.value?.isLocal == true
 
     override fun durChapterIndex(): Int {
         return durChapterIndex
@@ -160,7 +173,11 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
 
     override fun openChapter(bookChapter: BookChapter) {
         activity?.run {
-            setResult(RESULT_OK, Intent().putExtra("index", bookChapter.index))
+            setResult(
+                RESULT_OK, Intent()
+                    .putExtra("index", bookChapter.index)
+                    .putExtra("chapterChanged", bookChapter.index != durChapterIndex)
+            )
             finish()
         }
     }

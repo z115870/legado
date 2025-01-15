@@ -14,7 +14,6 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.constant.AppPattern
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
@@ -60,7 +59,7 @@ class ImportReplaceRuleDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
         binding.toolBar.setTitle(R.string.import_replace_rule)
-        binding.rotateLoading.show()
+        binding.rotateLoading.visible()
         initMenu()
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
@@ -89,14 +88,14 @@ class ImportReplaceRuleDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
             upSelectText()
         }
         viewModel.errorLiveData.observe(this) {
-            binding.rotateLoading.hide()
+            binding.rotateLoading.gone()
             binding.tvMsg.apply {
                 text = it
                 visible()
             }
         }
         viewModel.successLiveData.observe(this) {
-            binding.rotateLoading.hide()
+            binding.rotateLoading.gone()
             if (it > 0) {
                 adapter.setItems(viewModel.allRules)
                 upSelectText()
@@ -123,7 +122,7 @@ class ImportReplaceRuleDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
     override fun onMenuItemClick(item: MenuItem?): Boolean {
         when (item?.itemId) {
             R.id.menu_new_group -> alertCustomGroup(item)
-            R.id.menu_Keep_original_name -> {
+            R.id.menu_keep_original_name -> {
                 item.isChecked = !item.isChecked
                 putPrefBoolean(PreferKey.importKeepName, item.isChecked)
             }
@@ -134,10 +133,7 @@ class ImportReplaceRuleDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
     private fun alertCustomGroup(item: MenuItem) {
         alert(R.string.diy_edit_source_group) {
             val alertBinding = DialogCustomGroupBinding.inflate(layoutInflater).apply {
-                val groups = linkedSetOf<String>()
-                appDb.replaceRuleDao.allGroup.forEach { group ->
-                    groups.addAll(group.splitNotBlank(AppPattern.splitGroupRegex))
-                }
+                val groups = appDb.replaceRuleDao.allGroups()
                 textInputLayout.setHint(R.string.group_name)
                 editView.setFilterValues(groups.toList())
                 editView.dropDownHeight = 180.dpToPx()

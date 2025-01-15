@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.toc
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import io.legado.app.R
@@ -9,7 +11,7 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.databinding.ItemChapterListBinding
-import io.legado.app.help.ContentProcessor
+import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.theme.ThemeUtils
@@ -19,10 +21,8 @@ import io.legado.app.utils.gone
 import io.legado.app.utils.longToastOnUi
 import io.legado.app.utils.visible
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
 class ChapterListAdapter(context: Context, val callback: Callback) :
@@ -30,6 +30,7 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
 
     val cacheFileNames = hashSetOf<String>()
     private val displayTitleMap = ConcurrentHashMap<String, String>()
+    private val handler = Handler(Looper.getMainLooper())
 
     override val diffItemCallback: DiffUtil.ItemCallback<BookChapter>
         get() = object : DiffUtil.ItemCallback<BookChapter>() {
@@ -51,6 +52,7 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                         && oldItem.isPay == newItem.isPay
                         && oldItem.title == newItem.title
                         && oldItem.tag == newItem.tag
+                        && oldItem.wordCount == newItem.wordCount
                         && oldItem.isVolume == newItem.isVolume
             }
 
@@ -75,7 +77,7 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
             val replaceRules = ContentProcessor.get(book.name, book.origin).getTitleReplaceRules()
             val useReplace = AppConfig.tocUiUseReplace && book.getUseReplaceRule()
             val items = getItems()
-            async {
+            launch {
                 for (i in startIndex until items.size) {
                     val item = items[i]
                     if (displayTitleMap[item.title] == null) {
@@ -83,13 +85,13 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                         val displayTitle = item.getDisplayTitle(replaceRules, useReplace)
                         ensureActive()
                         displayTitleMap[item.title] = displayTitle
-                        withContext(Main) {
+                        handler.post {
                             notifyItemChanged(i, true)
                         }
                     }
                 }
-            }.start()
-            async {
+            }
+            launch {
                 for (i in startIndex downTo 0) {
                     val item = items[i]
                     if (displayTitleMap[item.title] == null) {
@@ -97,12 +99,12 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                         val displayTitle = item.getDisplayTitle(replaceRules, useReplace)
                         ensureActive()
                         displayTitleMap[item.title] = displayTitle
-                        withContext(Main) {
+                        handler.post {
                             notifyItemChanged(i, true)
                         }
                     }
                 }
-            }.start()
+            }
         }
     }
 
@@ -122,7 +124,9 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
     ) {
         binding.run {
             val isDur = callback.durChapterIndex() == item.index
-            val cached = callback.isLocalBook || cacheFileNames.contains(item.getFileName())
+            val cached = callback.isLocalBook
+                    || item.isVolume
+                    || cacheFileNames.contains(item.getFileName())
             if (payloads.isEmpty()) {
                 if (isDur) {
                     tvChapterName.setTextColor(context.accentColor)
@@ -138,13 +142,23 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                     tvChapterItem.background =
                         ThemeUtils.resolveDrawable(context, android.R.attr.selectableItemBackground)
                 }
+
+                //卷名不显示
                 if (!item.tag.isNullOrEmpty() && !item.isVolume) {
-                    //卷名不显示tag(更新时间规则)
+                    //更新时间规则
                     tvTag.text = item.tag
                     tvTag.visible()
                 } else {
                     tvTag.gone()
                 }
+                if (AppConfig.tocCountWords && !item.wordCount.isNullOrEmpty() && !item.isVolume) {
+                    //章节字数
+                    tvWordCount.text = item.wordCount
+                    tvWordCount.visible()
+                } else {
+                    tvWordCount.gone()
+                }
+
                 upHasCache(binding, isDur, cached)
             } else {
                 tvChapterName.text = getDisplayTitle(item)

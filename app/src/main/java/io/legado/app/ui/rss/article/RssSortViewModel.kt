@@ -8,6 +8,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
+import io.legado.app.help.source.removeSortCache
 
 
 class RssSortViewModel(application: Application) : BaseViewModel(application) {
@@ -60,6 +61,24 @@ class RssSortViewModel(application: Application) : BaseViewModel(application) {
             order = System.currentTimeMillis()
         }.onSuccess {
 
+        }
+    }
+
+    fun clearSortCache(onFinally: () -> Unit) {
+        execute {
+            rssSource?.removeSortCache()
+        }.onFinally {
+            onFinally.invoke()
+        }
+    }
+
+    fun countRead() : Int{
+        return appDb.rssArticleDao.countRead
+    }
+
+    fun delReadRecord() {
+        execute {
+            appDb.rssArticleDao.deleteRecord()
         }
     }
 

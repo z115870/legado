@@ -6,14 +6,18 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.recyclerview.widget.RecyclerView
+import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ItemArrangeBookBinding
+import io.legado.app.help.book.isLocal
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import java.util.*
 
 class BookAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<Book, ItemArrangeBookBinding>(context),
@@ -51,6 +55,11 @@ class BookAdapter(context: Context, val callBack: CallBack) :
             tvAuthor.visibility = if (item.author.isEmpty()) View.GONE else View.VISIBLE
             tvGroupS.text = getGroupName(item.group)
             checkbox.isChecked = selectedBooks.contains(item)
+            if (item.isLocal) {
+                tvOrigin.setText(R.string.local_book)
+            } else {
+                tvOrigin.text = item.originName
+            }
         }
     }
 
@@ -79,6 +88,13 @@ class BookAdapter(context: Context, val callBack: CallBack) :
                         selectedBooks.remove(it)
                     }
                     callBack.upSelectCount()
+                }
+            }
+            if (AppConfig.openBookInfoByClickTitle) {
+                tvName.setOnClickListener {
+                    getItem(holder.layoutPosition)?.let {
+                        callBack.openBook(it)
+                    }
                 }
             }
             tvDelete.setOnClickListener {
@@ -118,6 +134,25 @@ class BookAdapter(context: Context, val callBack: CallBack) :
             }
         }
         notifyDataSetChanged()
+        callBack.upSelectCount()
+    }
+
+    fun checkSelectedInterval() {
+        val selectedPosition = linkedSetOf<Int>()
+        getItems().forEachIndexed { index, it ->
+            if (selectedBooks.contains(it)) {
+                selectedPosition.add(index)
+            }
+        }
+        val minPosition = Collections.min(selectedPosition)
+        val maxPosition = Collections.max(selectedPosition)
+        val itemCount = maxPosition - minPosition + 1
+        for (i in minPosition..maxPosition) {
+            getItem(i)?.let {
+                selectedBooks.add(it)
+            }
+        }
+        notifyItemRangeChanged(minPosition, itemCount, bundleOf(Pair("selected", null)))
         callBack.upSelectCount()
     }
 
@@ -194,9 +229,15 @@ class BookAdapter(context: Context, val callBack: CallBack) :
 
     interface CallBack {
         val groupList: List<BookGroup>
+
         fun upSelectCount()
+
         fun updateBook(vararg book: Book)
+
         fun deleteBook(book: Book)
+
         fun selectGroup(requestCode: Int, groupId: Long)
+
+        fun openBook(book: Book)
     }
 }

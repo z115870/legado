@@ -10,15 +10,13 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.model.rss.Rss
-import io.legado.app.utils.printOnDebug
-
-import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import io.legado.app.utils.stackTraceStr
+import kotlinx.coroutines.Dispatchers.IO
 
 
 class RssArticlesViewModel(application: Application) : BaseViewModel(application) {
-    val loadFinally = MutableLiveData<Boolean>()
+    val loadFinallyLiveData = MutableLiveData<Boolean>()
+    val loadErrorLiveData = MutableLiveData<String>()
     var isLoading = true
     var order = System.currentTimeMillis()
     private var nextPageUrl: String? = null
@@ -33,72 +31,66 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         }
     }
 
-    fun loadContent(rssSource: RssSource) {
+    fun loadArticles(rssSource: RssSource) {
         isLoading = true
         page = 1
-        Rss.getArticles(viewModelScope, sortName, sortUrl, rssSource, page)
-            .onSuccess(Dispatchers.IO) {
-                nextPageUrl = it.second
-                it.first.let { list ->
-                    list.forEach { rssArticle ->
-                        rssArticle.order = order--
-                    }
-                    appDb.rssArticleDao.insert(*list.toTypedArray())
-                    if (!rssSource.ruleNextPage.isNullOrEmpty()) {
-                        appDb.rssArticleDao.clearOld(rssSource.sourceUrl, sortName, order)
-                        loadFinally.postValue(true)
-                    } else {
-                        withContext(Dispatchers.Main) {
-                            loadFinally.postValue(false)
-                        }
-                    }
-                    isLoading = false
-                }
-            }.onError {
-                loadFinally.postValue(false)
-                AppLog.put("rss获取内容失败", it)
-                context.toastOnUi(it.localizedMessage)
+        order = System.currentTimeMillis()
+        Rss.getArticles(viewModelScope, sortName, sortUrl, rssSource, page).onSuccess(IO) {
+            nextPageUrl = it.second
+            val articles = it.first
+            articles.forEach { rssArticle ->
+                rssArticle.order = order--
             }
+            appDb.rssArticleDao.insert(*articles.toTypedArray())
+            if (!rssSource.ruleNextPage.isNullOrEmpty()) {
+                appDb.rssArticleDao.clearOld(rssSource.sourceUrl, sortName, order)
+            }
+            val hasMore = articles.isNotEmpty() && !rssSource.ruleNextPage.isNullOrEmpty()
+            loadFinallyLiveData.postValue(hasMore)
+            isLoading = false
+        }.onError {
+            loadFinallyLiveData.postValue(false)
+            AppLog.put("rss获取内容失败", it)
+            loadErrorLiveData.postValue(it.stackTraceStr)
+        }
     }
 
     fun loadMore(rssSource: RssSource) {
         isLoading = true
         page++
         val pageUrl = nextPageUrl
-        if (!pageUrl.isNullOrEmpty()) {
-            Rss.getArticles(viewModelScope, sortName, pageUrl, rssSource, page)
-                .onSuccess(Dispatchers.IO) {
-                    nextPageUrl = it.second
-                    loadMoreSuccess(it.first)
-                }
-                .onError {
-                    it.printOnDebug()
-                    loadFinally.postValue(false)
-                }
-        } else {
-            loadFinally.postValue(false)
+        if (pageUrl.isNullOrEmpty()) {
+            loadFinallyLiveData.postValue(false)
+            return
+        }
+        Rss.getArticles(viewModelScope, sortName, pageUrl, rssSource, page).onSuccess(IO) {
+            nextPageUrl = it.second
+            loadMoreSuccess(it.first)
+            isLoading = false
+        }.onError {
+            loadFinallyLiveData.postValue(false)
+            AppLog.put("rss获取内容失败", it)
+            loadErrorLiveData.postValue(it.stackTraceStr)
         }
     }
 
     private fun loadMoreSuccess(articles: MutableList<RssArticle>) {
-        articles.let { list ->
-            if (list.isEmpty()) {
-                loadFinally.postValue(false)
-                return@let
-            }
-            val firstArticle = list.first()
-            val dbArticle = appDb.rssArticleDao
-                .get(firstArticle.origin, firstArticle.link)
-            if (dbArticle != null) {
-                loadFinally.postValue(false)
-            } else {
-                list.forEach { rssArticle ->
-                    rssArticle.order = order--
-                }
-                appDb.rssArticleDao.insert(*list.toTypedArray())
-            }
+        if (articles.isEmpty()) {
+            loadFinallyLiveData.postValue(false)
+            return
         }
-        isLoading = false
+        val firstArticle = articles.first()
+        val dbFirstArticle = appDb.rssArticleDao.get(firstArticle.origin, firstArticle.link)
+        val lastArticle = articles.last()
+        val dbLastArticle = appDb.rssArticleDao.get(lastArticle.origin, lastArticle.link)
+        if (dbFirstArticle != null && dbLastArticle != null) {
+            loadFinallyLiveData.postValue(false)
+        } else {
+            articles.forEach {
+                it.order = order--
+            }
+            appDb.rssArticleDao.append(*articles.toTypedArray())
+        }
     }
 
 }

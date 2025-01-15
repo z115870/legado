@@ -1,55 +1,97 @@
 package io.legado.app.utils
 
-import com.google.gson.*
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
+import com.google.gson.JsonParseException
+import com.google.gson.JsonSyntaxException
+import com.google.gson.ToNumberPolicy
 import com.google.gson.internal.LinkedTreeMap
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonWriter
+import io.legado.app.data.entities.rule.BookInfoRule
+import io.legado.app.data.entities.rule.ContentRule
+import io.legado.app.data.entities.rule.ExploreRule
+import io.legado.app.data.entities.rule.ReviewRule
+import io.legado.app.data.entities.rule.SearchRule
+import io.legado.app.data.entities.rule.TocRule
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.io.OutputStreamWriter
-import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import kotlin.math.ceil
 
-
-val GSON: Gson by lazy {
+val INITIAL_GSON: Gson by lazy {
     GsonBuilder()
         .registerTypeAdapter(
             object : TypeToken<Map<String?, Any?>?>() {}.type,
             MapDeserializerDoubleAsIntFix()
         )
         .registerTypeAdapter(Int::class.java, IntJsonDeserializer())
+        .registerTypeAdapter(String::class.java, StringJsonDeserializer())
+        .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
         .disableHtmlEscaping()
         .setPrettyPrinting()
         .create()
 }
 
+val GSON: Gson by lazy {
+    INITIAL_GSON.newBuilder()
+        .registerTypeAdapter(ExploreRule::class.java, ExploreRule.jsonDeserializer)
+        .registerTypeAdapter(SearchRule::class.java, SearchRule.jsonDeserializer)
+        .registerTypeAdapter(BookInfoRule::class.java, BookInfoRule.jsonDeserializer)
+        .registerTypeAdapter(TocRule::class.java, TocRule.jsonDeserializer)
+        .registerTypeAdapter(ContentRule::class.java, ContentRule.jsonDeserializer)
+        .registerTypeAdapter(ReviewRule::class.java, ReviewRule.jsonDeserializer)
+        .create()
+}
+
 inline fun <reified T> genericType(): Type = object : TypeToken<T>() {}.type
 
-inline fun <reified T> Gson.fromJsonObject(json: String?): Result<T?> {
+inline fun <reified T> Gson.fromJsonObject(json: String?): Result<T> {
     return kotlin.runCatching {
-        fromJson(json, genericType<T>()) as? T
+        if (json == null) {
+            throw JsonSyntaxException("解析字符串为空")
+        }
+        fromJson(json, genericType<T>()) as T
     }
 }
 
-inline fun <reified T> Gson.fromJsonArray(json: String?): Result<List<T>?> {
+inline fun <reified T> Gson.fromJsonArray(json: String?): Result<List<T>> {
     return kotlin.runCatching {
-        fromJson(json, ParameterizedTypeImpl(T::class.java)) as? List<T>
+        if (json == null) {
+            throw JsonSyntaxException("解析字符串为空")
+        }
+        fromJson(
+            json,
+            TypeToken.getParameterized(List::class.java, T::class.java).type
+        ) as List<T>
     }
 }
 
-inline fun <reified T> Gson.fromJsonObject(inputStream: InputStream?): Result<T?> {
+inline fun <reified T> Gson.fromJsonObject(inputStream: InputStream?): Result<T> {
     return kotlin.runCatching {
+        if (inputStream == null) {
+            throw JsonSyntaxException("解析流为空")
+        }
         val reader = InputStreamReader(inputStream)
-        fromJson(reader, genericType<T>()) as? T
+        fromJson(reader, genericType<T>()) as T
     }
 }
 
-inline fun <reified T> Gson.fromJsonArray(inputStream: InputStream?): Result<List<T>?> {
+inline fun <reified T> Gson.fromJsonArray(inputStream: InputStream?): Result<List<T>> {
     return kotlin.runCatching {
+        if (inputStream == null) {
+            throw JsonSyntaxException("解析流为空")
+        }
         val reader = InputStreamReader(inputStream)
-        fromJson(reader, ParameterizedTypeImpl(T::class.java)) as? List<T>
+        fromJson(
+            reader,
+            TypeToken.getParameterized(List::class.java, T::class.java).type
+        ) as List<T>
     }
 }
 
@@ -70,12 +112,23 @@ fun Gson.writeToOutputStream(out: OutputStream, any: Any) {
     writer.close()
 }
 
-class ParameterizedTypeImpl(private val clazz: Class<*>) : ParameterizedType {
-    override fun getRawType(): Type = List::class.java
+/**
+ *
+ */
+class StringJsonDeserializer : JsonDeserializer<String?> {
 
-    override fun getOwnerType(): Type? = null
+    override fun deserialize(
+        json: JsonElement,
+        typeOfT: Type,
+        context: JsonDeserializationContext?
+    ): String? {
+        return when {
+            json.isJsonPrimitive -> json.asString
+            json.isJsonNull -> null
+            else -> json.toString()
+        }
+    }
 
-    override fun getActualTypeArguments(): Array<Type> = arrayOf(clazz)
 }
 
 /**
@@ -102,7 +155,6 @@ class IntJsonDeserializer : JsonDeserializer<Int?> {
     }
 
 }
-
 
 /**
  * 修复Int变为Double的问题

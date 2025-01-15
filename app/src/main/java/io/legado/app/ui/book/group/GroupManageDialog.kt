@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -14,6 +15,7 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.DialogRecyclerViewBinding
@@ -26,12 +28,18 @@ import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
-
+/**
+ * 书籍分组管理
+ */
 class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     Toolbar.OnMenuItemClickListener {
 
@@ -67,8 +75,10 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     }
 
     private fun initData() {
-        launch {
-            appDb.bookGroupDao.flowAll().conflate().collect {
+        lifecycleScope.launch {
+            appDb.bookGroupDao.flowAll().catch {
+                AppLog.put("书籍分组管理界面获取分组数据失败\n${it.localizedMessage}", it)
+            }.flowOn(IO).conflate().collect {
                 adapter.setItems(it)
             }
         }
@@ -82,7 +92,13 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
         when (item?.itemId) {
-            R.id.menu_add -> showDialogFragment(GroupEditDialog())
+            R.id.menu_add -> {
+                if (appDb.bookGroupDao.canAddGroup) {
+                    showDialogFragment(GroupEditDialog())
+                } else {
+                    toastOnUi("分组已达上限(64个)")
+                }
+            }
         }
         return true
     }

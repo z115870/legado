@@ -11,7 +11,12 @@ import io.legado.app.databinding.DialogTipConfigBinding
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.utils.*
+import io.legado.app.utils.checkByIndex
+import io.legado.app.utils.getIndexById
+import io.legado.app.utils.hexString
+import io.legado.app.utils.observeEvent
+import io.legado.app.utils.postEvent
+import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 
@@ -19,6 +24,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
 
     companion object {
         const val TIP_COLOR = 7897
+        const val TIP_DIVIDER_COLOR = 7898
     }
 
     private val binding by viewBinding(DialogTipConfigBinding::bind)
@@ -33,6 +39,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
         initEvent()
         observeEvent<String>(EventBus.TIP_COLOR) {
             upTvTipColor()
+            upTvTipDividerColor()
         }
     }
 
@@ -64,40 +71,51 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
             }
         }
         upTvTipColor()
+        upTvTipDividerColor()
     }
 
     private fun upTvTipColor() {
-        binding.tvTipColor.text =
-            if (ReadTipConfig.tipColor == 0) {
-                "跟随正文"
-            } else {
-                "#${ReadTipConfig.tipColor.hexString}"
-            }
+        val tipColorNames = ReadTipConfig.tipColorNames
+        val tipColor = ReadTipConfig.tipColor
+        binding.tvTipColor.text = if (tipColor == 0) {
+            tipColorNames.first()
+        } else {
+            "#${tipColor.hexString}"
+        }
+    }
+
+    private fun upTvTipDividerColor() {
+        val tipDividerColorNames = ReadTipConfig.tipDividerColorNames
+        val tipDividerColor = ReadTipConfig.tipDividerColor
+        binding.tvTipDividerColor.text = when (tipDividerColor) {
+            -1, 0 -> tipDividerColorNames[tipDividerColor + 1]
+            else -> "#${tipDividerColor.hexString}"
+        }
     }
 
     private fun initEvent() = binding.run {
         rgTitleMode.setOnCheckedChangeListener { _, checkedId ->
             ReadBookConfig.titleMode = rgTitleMode.getIndexById(checkedId)
-            postEvent(EventBus.UP_CONFIG, true)
+            postEvent(EventBus.UP_CONFIG, arrayListOf(5))
         }
         dsbTitleSize.onChanged = {
             ReadBookConfig.titleSize = it
-            postEvent(EventBus.UP_CONFIG, true)
+            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
         }
         dsbTitleTop.onChanged = {
             ReadBookConfig.titleTopSpacing = it
-            postEvent(EventBus.UP_CONFIG, true)
+            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
         }
         dsbTitleBottom.onChanged = {
             ReadBookConfig.titleBottomSpacing = it
-            postEvent(EventBus.UP_CONFIG, true)
+            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
         }
         llHeaderShow.setOnClickListener {
             val headerModes = ReadTipConfig.getHeaderModes(requireContext())
             context?.selector(items = headerModes.values.toList()) { _, i ->
                 ReadTipConfig.headerMode = headerModes.keys.toList()[i]
                 tvHeaderShow.text = headerModes[ReadTipConfig.headerMode]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2))
             }
         }
         llFooterShow.setOnClickListener {
@@ -105,7 +123,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
             context?.selector(items = footerModes.values.toList()) { _, i ->
                 ReadTipConfig.footerMode = footerModes.keys.toList()[i]
                 tvFooterShow.text = footerModes[ReadTipConfig.footerMode]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2))
             }
         }
         llHeaderLeft.setOnClickListener {
@@ -114,7 +132,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 clearRepeat(tipValue)
                 ReadTipConfig.tipHeaderLeft = tipValue
                 tvHeaderLeft.text = ReadTipConfig.tipNames[i]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
             }
         }
         llHeaderMiddle.setOnClickListener {
@@ -123,7 +141,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 clearRepeat(tipValue)
                 ReadTipConfig.tipHeaderMiddle = tipValue
                 tvHeaderMiddle.text = ReadTipConfig.tipNames[i]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
             }
         }
         llHeaderRight.setOnClickListener {
@@ -132,7 +150,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 clearRepeat(tipValue)
                 ReadTipConfig.tipHeaderRight = tipValue
                 tvHeaderRight.text = ReadTipConfig.tipNames[i]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
             }
         }
         llFooterLeft.setOnClickListener {
@@ -141,7 +159,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 clearRepeat(tipValue)
                 ReadTipConfig.tipFooterLeft = tipValue
                 tvFooterLeft.text = ReadTipConfig.tipNames[i]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
             }
         }
         llFooterMiddle.setOnClickListener {
@@ -150,7 +168,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 clearRepeat(tipValue)
                 ReadTipConfig.tipFooterMiddle = tipValue
                 tvFooterMiddle.text = ReadTipConfig.tipNames[i]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
             }
         }
         llFooterRight.setOnClickListener {
@@ -159,21 +177,39 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 clearRepeat(tipValue)
                 ReadTipConfig.tipFooterRight = tipValue
                 tvFooterRight.text = ReadTipConfig.tipNames[i]
-                postEvent(EventBus.UP_CONFIG, true)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
             }
         }
         llTipColor.setOnClickListener {
-            context?.selector(items = arrayListOf("跟随正文", "自定义")) { _, i ->
+            context?.selector(items = ReadTipConfig.tipColorNames) { _, i ->
                 when (i) {
                     0 -> {
                         ReadTipConfig.tipColor = 0
                         upTvTipColor()
-                        postEvent(EventBus.UP_CONFIG, true)
+                        postEvent(EventBus.UP_CONFIG, arrayListOf(2))
                     }
+
                     1 -> ColorPickerDialog.newBuilder()
                         .setShowAlphaSlider(false)
                         .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
                         .setDialogId(TIP_COLOR)
+                        .show(requireActivity())
+                }
+            }
+        }
+        llTipDividerColor.setOnClickListener {
+            context?.selector(items = ReadTipConfig.tipDividerColorNames) { _, i ->
+                when (i) {
+                    0, 1 -> {
+                        ReadTipConfig.tipDividerColor = i - 1
+                        upTvTipDividerColor()
+                        postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+                    }
+
+                    2 -> ColorPickerDialog.newBuilder()
+                        .setShowAlphaSlider(false)
+                        .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+                        .setDialogId(TIP_DIVIDER_COLOR)
                         .show(requireActivity())
                 }
             }
