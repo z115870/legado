@@ -1,17 +1,32 @@
 package io.legado.app.help.coroutine
 
 import io.legado.app.utils.printOnDebug
-import kotlinx.coroutines.*
-
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.CoroutineContext
 
 /**
  * 链式协程
+ * 注意：如果协程太快完成，回调会不执行
  */
-@Suppress("unused")
+@Suppress("unused", "MemberVisibilityCanBePrivate")
 class Coroutine<T>(
     val scope: CoroutineScope,
     context: CoroutineContext = Dispatchers.IO,
+    val startOption: CoroutineStart = CoroutineStart.DEFAULT,
+    val executeContext: CoroutineContext = Dispatchers.Main,
     block: suspend CoroutineScope.() -> T
 ) {
 
@@ -22,9 +37,11 @@ class Coroutine<T>(
         fun <T> async(
             scope: CoroutineScope = DEFAULT,
             context: CoroutineContext = Dispatchers.IO,
+            start: CoroutineStart = CoroutineStart.DEFAULT,
+            executeContext: CoroutineContext = Dispatchers.Main,
             block: suspend CoroutineScope.() -> T
         ): Coroutine<T> {
-            return Coroutine(scope, context, block)
+            return Coroutine(scope, context, start, executeContext, block)
         }
 
     }
@@ -97,6 +114,9 @@ class Coroutine<T>(
         return this@Coroutine
     }
 
+    /**
+     * 如果协程被取消，不执行
+     */
     fun onFinally(
         context: CoroutineContext? = null,
         block: suspend CoroutineScope.() -> Unit
@@ -110,18 +130,25 @@ class Coroutine<T>(
         block: suspend CoroutineScope.() -> Unit
     ): Coroutine<T> {
         this.cancel = VoidCallback(context, block)
+        job.invokeOnCompletion {
+            if (it is CancellationException && it !is ActivelyCancelException) {
+                cancel()
+            }
+        }
         return this@Coroutine
     }
 
     //取消当前任务
-    fun cancel(cause: CancellationException? = null) {
-        job.cancel(cause)
+    fun cancel(cause: ActivelyCancelException = ActivelyCancelException()) {
+        if (!job.isCancelled) {
+            job.cancel(cause)
+        }
         cancel?.let {
-            MainScope().launch {
+            DEFAULT.launch(executeContext) {
                 if (null == it.context) {
-                    it.block.invoke(scope)
+                    it.block.invoke(this)
                 } else {
-                    withContext(scope.coroutineContext + it.context) {
+                    withContext(it.context) {
                         it.block.invoke(this)
                     }
                 }
@@ -133,22 +160,23 @@ class Coroutine<T>(
         return job.invokeOnCompletion(handler)
     }
 
+    fun start() {
+        job.start()
+    }
+
     private fun executeInternal(
         context: CoroutineContext,
         block: suspend CoroutineScope.() -> T
     ): Job {
-        return (scope + Dispatchers.Main).launch {
+        return (scope.plus(executeContext)).launch(start = startOption) {
             try {
                 start?.let { dispatchVoidCallback(this, it) }
                 ensureActive()
-                val value = executeBlock(scope, context, timeMillis ?: 0L, block)
+                val value = executeBlock(this, context, timeMillis ?: 0L, block)
                 ensureActive()
                 success?.let { dispatchCallback(this, value, it) }
             } catch (e: Throwable) {
                 e.printOnDebug()
-                if (e is CancellationException && e !is TimeoutCancellationException) {
-                    return@launch
-                }
                 val consume: Boolean = errorReturn?.value?.let { value ->
                     success?.let { dispatchCallback(this, value, it) }
                     true
@@ -164,7 +192,9 @@ class Coroutine<T>(
 
     private suspend inline fun dispatchVoidCallback(scope: CoroutineScope, callback: VoidCallback) {
         if (null == callback.context) {
-            callback.block.invoke(scope)
+            withContext(scope.coroutineContext) {
+                callback.block.invoke(scope)
+            }
         } else {
             withContext(scope.coroutineContext + callback.context) {
                 callback.block.invoke(this)

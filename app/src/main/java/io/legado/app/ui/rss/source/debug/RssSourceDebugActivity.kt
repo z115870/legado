@@ -5,12 +5,14 @@ import android.view.Menu
 import android.view.MenuItem
 import android.widget.SearchView
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivitySourceDebugBinding
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.dialog.TextDialog
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.gone
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
@@ -30,15 +32,15 @@ class RssSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, RssSou
         initRecyclerView()
         initSearchView()
         viewModel.observe { state, msg ->
-            launch {
+            lifecycleScope.launch {
                 adapter.addItem(msg)
                 if (state == -1 || state == 1000) {
-                    binding.rotateLoading.hide()
+                    binding.rotateLoading.gone()
                 }
             }
         }
         viewModel.initData(intent.getStringExtra("key")) {
-            startSearch()
+            startDebug()
         }
     }
 
@@ -49,8 +51,8 @@ class RssSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, RssSou
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_list_src -> showDialogFragment(TextDialog(viewModel.listSrc))
-            R.id.menu_content_src -> showDialogFragment(TextDialog(viewModel.contentSrc))
+            R.id.menu_list_src -> showDialogFragment(TextDialog("Html", viewModel.listSrc))
+            R.id.menu_content_src -> showDialogFragment(TextDialog("Html", viewModel.contentSrc))
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -58,6 +60,7 @@ class RssSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, RssSou
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
         binding.recyclerView.adapter = adapter
+        binding.recyclerView.applyNavigationBarPadding()
         binding.rotateLoading.loadingColor = accentColor
     }
 
@@ -65,12 +68,11 @@ class RssSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, RssSou
         binding.titleBar.findViewById<SearchView>(R.id.search_view).gone()
     }
 
-    private fun startSearch() {
+    private fun startDebug() {
         adapter.clearItems()
-        viewModel.startDebug({
-            binding.rotateLoading.show()
-        }, {
-            toastOnUi("未获取到源")
-        })
+        viewModel.rssSource?.let {
+            binding.rotateLoading.visible()
+            viewModel.startDebug(it)
+        } ?: toastOnUi(R.string.error_no_source)
     }
 }

@@ -1,10 +1,15 @@
 package io.legado.app.ui.widget.image
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.util.AttributeSet
+import androidx.lifecycle.Lifecycle
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
@@ -150,7 +155,7 @@ class CoverImageView @JvmOverloads constructor(
             override fun onLoadFailed(
                 e: GlideException?,
                 model: Any?,
-                target: Target<Drawable>?,
+                target: Target<Drawable>,
                 isFirstResource: Boolean
             ): Boolean {
                 defaultCover = true
@@ -158,10 +163,10 @@ class CoverImageView @JvmOverloads constructor(
             }
 
             override fun onResourceReady(
-                resource: Drawable?,
-                model: Any?,
+                resource: Drawable,
+                model: Any,
                 target: Target<Drawable>?,
-                dataSource: DataSource?,
+                dataSource: DataSource,
                 isFirstResource: Boolean
             ): Boolean {
                 defaultCover = false
@@ -176,13 +181,14 @@ class CoverImageView @JvmOverloads constructor(
         name: String? = null,
         author: String? = null,
         loadOnlyWifi: Boolean = false,
-        sourceOrigin: String? = null
+        sourceOrigin: String? = null,
+        lifecycle: Lifecycle? = null
     ) {
         this.bitmapPath = path
         this.name = name?.replace(AppPattern.bdRegex, "")?.trim()
         this.author = author?.replace(AppPattern.bdRegex, "")?.trim()
+        defaultCover = true
         if (AppConfig.useDefaultCover) {
-            defaultCover = true
             ImageLoader.load(context, BookCover.defaultDrawable)
                 .centerCrop()
                 .into(this)
@@ -191,8 +197,12 @@ class CoverImageView @JvmOverloads constructor(
             if (sourceOrigin != null) {
                 options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
             }
-            ImageLoader.load(context, path)//Glide自动识别http://,content://和file://
-                .apply(options)
+            val builder = if (lifecycle != null) {
+                ImageLoader.load(lifecycle, path)
+            } else {
+                ImageLoader.load(context, path)//Glide自动识别http://,content://和file://
+            }
+            builder.apply(options)
                 .placeholder(BookCover.defaultDrawable)
                 .error(BookCover.defaultDrawable)
                 .listener(glideListener)

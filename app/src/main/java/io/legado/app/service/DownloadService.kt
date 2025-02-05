@@ -1,5 +1,6 @@
 package io.legado.app.service
 
+import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -8,10 +9,14 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
+import io.legado.app.constant.NotificationId
 import io.legado.app.utils.IntentType
 import io.legado.app.utils.openFileUri
 import io.legado.app.utils.servicePendingIntent
@@ -29,7 +34,7 @@ import splitties.systemservices.notificationManager
  */
 class DownloadService : BaseService() {
     private val groupKey = "${appCtx.packageName}.download"
-    private val downloads = hashMapOf<Long, Pair<String, String>>()
+    private val downloads = hashMapOf<Long, DownloadInfo>()
     private val completeDownloads = hashSetOf<Long>()
     private var upStateJob: Job? = null
     private val downloadReceiver = object : BroadcastReceiver() {
@@ -38,10 +43,15 @@ class DownloadService : BaseService() {
         }
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate() {
         super.onCreate()
-        upSummaryNotification()
-        registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        ContextCompat.registerReceiver(
+            this,
+            downloadReceiver,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_EXPORTED
+        )
     }
 
     override fun onDestroy() {
@@ -55,14 +65,16 @@ class DownloadService : BaseService() {
                 intent.getStringExtra("url"),
                 intent.getStringExtra("fileName")
             )
+
             IntentAction.play -> {
                 val id = intent.getLongExtra("downloadId", 0)
                 if (completeDownloads.contains(id)) {
-                    openDownload(id, downloads[id]?.second)
+                    openDownload(id, downloads[id]?.fileName)
                 } else {
                     toastOnUi("未完成,下载的文件夹Download")
                 }
             }
+
             IntentAction.stop -> {
                 val downloadId = intent.getLongExtra("downloadId", 0)
                 removeDownload(downloadId)
@@ -71,6 +83,9 @@ class DownloadService : BaseService() {
         return super.onStartCommand(intent, flags, startId)
     }
 
+    /**
+     * 开始下载
+     */
     @Synchronized
     private fun startDownload(url: String?, fileName: String?) {
         if (url == null || fileName == null) {
@@ -79,7 +94,7 @@ class DownloadService : BaseService() {
             }
             return
         }
-        if (downloads.values.any { it.first == url }) {
+        if (downloads.values.any { it.url == url }) {
             toastOnUi("已在下载列表")
             return
         }
@@ -92,19 +107,26 @@ class DownloadService : BaseService() {
             request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
             // 添加一个下载任务
             val downloadId = downloadManager.enqueue(request)
-            downloads[downloadId] = Pair(url, fileName)
+            downloads[downloadId] =
+                DownloadInfo(url, fileName, NotificationId.Download + downloads.size)
             queryState()
             if (upStateJob == null) {
                 checkDownloadState()
             }
         }.onFailure {
-            when (it) {
-                is SecurityException -> toastOnUi("下载出错,没有存储权限")
-                else -> toastOnUi("下载出错,${it.localizedMessage}")
+            it.printStackTrace()
+            val msg = when (it) {
+                is SecurityException -> "下载出错,没有存储权限"
+                else -> "下载出错,${it.localizedMessage}"
             }
+            toastOnUi(msg)
+            AppLog.put(msg, it)
         }
     }
 
+    /**
+     * 取消下载
+     */
     @Synchronized
     private fun removeDownload(downloadId: Long) {
         if (!completeDownloads.contains(downloadId)) {
@@ -115,22 +137,21 @@ class DownloadService : BaseService() {
         notificationManager.cancel(downloadId.toInt())
     }
 
+    /**
+     * 下载成功
+     */
     @Synchronized
     private fun successDownload(downloadId: Long) {
         if (!completeDownloads.contains(downloadId)) {
             completeDownloads.add(downloadId)
-            val fileName = downloads[downloadId]?.second
-            if (fileName?.endsWith(".apk") == true) {
-                openDownload(downloadId, fileName)
-            } else {
-                toastOnUi("$fileName ${getString(R.string.download_success)}")
-            }
+            val fileName = downloads[downloadId]?.fileName
+            openDownload(downloadId, fileName)
         }
     }
 
     private fun checkDownloadState() {
         upStateJob?.cancel()
-        upStateJob = launch {
+        upStateJob = lifecycleScope.launch {
             while (isActive) {
                 queryState()
                 delay(1000)
@@ -138,7 +159,9 @@ class DownloadService : BaseService() {
         }
     }
 
-    //查询下载进度
+    /**
+     * 查询下载进度
+     */
     @Synchronized
     private fun queryState() {
         if (downloads.isEmpty()) {
@@ -167,23 +190,40 @@ class DownloadService : BaseService() {
                             successDownload(id)
                             getString(R.string.download_success)
                         }
+
                         DownloadManager.STATUS_FAILED -> getString(R.string.download_error)
                         else -> getString(R.string.unknown_state)
                     }
-                    upDownloadNotification(id, "${downloads[id]?.second} $status", max, progress)
+                    downloads[id]?.let { downloadInfo ->
+                        upDownloadNotification(
+                            id,
+                            downloadInfo.notificationId,
+                            "${downloadInfo.fileName} $status",
+                            max,
+                            progress,
+                            downloadInfo.startTime
+                        )
+                    }
                 } while (cursor.moveToNext())
             }
         }
     }
 
+    /**
+     * 打开下载文件
+     */
     private fun openDownload(downloadId: Long, fileName: String?) {
-        downloadManager.getUriForDownloadedFile(downloadId)?.let { uri ->
-            val type = IntentType.from(fileName)
-            openFileUri(uri, type)
+        kotlin.runCatching {
+            downloadManager.getUriForDownloadedFile(downloadId)?.let { uri ->
+                val type = IntentType.from(fileName)
+                openFileUri(uri, type)
+            }
+        }.onFailure {
+            AppLog.put("打开下载文件${fileName}出错", it)
         }
     }
 
-    private fun upSummaryNotification() {
+    override fun startForegroundNotification() {
         val notification = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
             .setSubText(getString(R.string.action_download))
@@ -191,32 +231,49 @@ class DownloadService : BaseService() {
             .setGroupSummary(true)
             .setOngoing(true)
             .build()
-        startForeground(AppConst.notificationIdDownload, notification)
+        startForeground(NotificationId.DownloadService, notification)
     }
 
     /**
      * 更新通知
      */
-    private fun upDownloadNotification(downloadId: Long, content: String, max: Int, progress: Int) {
-        val notification = NotificationCompat.Builder(this, AppConst.channelIdDownload)
+    private fun upDownloadNotification(
+        downloadId: Long,
+        notificationId: Int,
+        content: String,
+        max: Int,
+        progress: Int,
+        startTime: Long
+    ) {
+        val notificationBuilder = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
             .setSubText(getString(R.string.action_download))
             .setContentTitle(content)
+            .setOnlyAlertOnce(true)
             .setContentIntent(
-                servicePendingIntent<DownloadService>(IntentAction.play) {
+                servicePendingIntent<DownloadService>(IntentAction.play, downloadId.toInt()) {
                     putExtra("downloadId", downloadId)
                 }
             )
             .setDeleteIntent(
-                servicePendingIntent<DownloadService>(IntentAction.stop) {
+                servicePendingIntent<DownloadService>(IntentAction.stop, downloadId.toInt()) {
                     putExtra("downloadId", downloadId)
                 }
             )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setProgress(max, progress, false)
             .setGroup(groupKey)
-            .build()
-        notificationManager.notify(downloadId.toInt(), notification)
+            .setWhen(startTime)
+        if (progress < max) {
+            notificationBuilder.setProgress(max, progress, false)
+        }
+        notificationManager.notify(notificationId, notificationBuilder.build())
     }
+
+    private data class DownloadInfo(
+        val url: String,
+        val fileName: String,
+        val notificationId: Int,
+        val startTime: Long = System.currentTimeMillis()
+    )
 
 }

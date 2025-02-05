@@ -2,11 +2,17 @@ package io.legado.app.ui.login
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.net.Uri
+import android.net.http.SslError
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.fragment.app.activityViewModels
@@ -16,6 +22,11 @@ import io.legado.app.constant.AppConst
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.databinding.FragmentWebViewLoginBinding
 import io.legado.app.help.http.CookieStore
+import io.legado.app.lib.theme.accentColor
+import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.gone
+import io.legado.app.utils.longSnackbar
+import io.legado.app.utils.openUrl
 import io.legado.app.utils.snackbar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -46,7 +57,8 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
                     binding.titleBar.snackbar(R.string.check_host_cookie)
                     viewModel.source?.let { source ->
                         source.loginUrl?.let {
-                            binding.webView.loadUrl(it, source.getHeaderMap(true))
+                            val absoluteUrl = NetworkUtils.getAbsoluteURL(source.getKey(), it)
+                            binding.webView.loadUrl(absoluteUrl, source.getHeaderMap(true))
                         }
                     }
                 }
@@ -56,17 +68,20 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView(source: BaseSource) {
+        binding.progressBar.fontColor = accentColor
         binding.webView.settings.apply {
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            domStorageEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
             builtInZoomControls = true
             javaScriptEnabled = true
+            displayZoomControls = false
             source.getHeaderMap()[AppConst.UA_NAME]?.let {
                 userAgentString = it
             }
         }
         val cookieManager = CookieManager.getInstance()
-        source.loginUrl?.let {
-            cookieManager.setCookie(it, CookieStore.getCookie(it))
-        }
         binding.webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 val cookie = cookieManager.getCookie(url)
@@ -82,9 +97,55 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
                 }
                 super.onPageFinished(view, url)
             }
+
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean {
+                return shouldOverrideUrlLoading(request.url)
+            }
+
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION", "KotlinRedundantDiagnosticSuppress")
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                return shouldOverrideUrlLoading(Uri.parse(url))
+            }
+
+            private fun shouldOverrideUrlLoading(url: Uri): Boolean {
+                when (url.scheme) {
+                    "http", "https" -> {
+                        return false
+                    }
+
+                    else -> {
+                        binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                            context?.openUrl(url)
+                        }
+                        return true
+                    }
+                }
+            }
+
+            @SuppressLint("WebViewClientOnReceivedSslError")
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: SslErrorHandler?,
+                error: SslError?
+            ) {
+                handler?.proceed()
+            }
+        }
+        binding.webView.webChromeClient = object : WebChromeClient() {
+
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                super.onProgressChanged(view, newProgress)
+                binding.progressBar.setDurProgress(newProgress)
+                binding.progressBar.gone(newProgress == 100)
+            }
+
         }
         source.loginUrl?.let {
-            binding.webView.loadUrl(it, source.getHeaderMap(true))
+            val absoluteUrl = NetworkUtils.getAbsoluteURL(source.getKey(), it)
+            binding.webView.loadUrl(absoluteUrl, source.getHeaderMap(true))
         }
     }
 

@@ -146,11 +146,22 @@
 }
 
 # 保持js引擎调用的java类
+-keep class * extends io.legado.app.help.JsExtensions{*;}
+# 保持js引擎调用的java类
 -keep class **.analyzeRule.**{*;}
 # 保持web类
 -keep class **.web.**{*;}
-#数据类
+# 数据类
 -keep class **.data.**{*;}
+# hutool-core hutool-crypto
+-keep class cn.hutool.core.**{*;}
+-keep class cn.hutool.crypto.**{*;}
+-dontwarn cn.hutool.**
+# 缓存 Cookie
+-keep class **.help.http.CookieStore{*;}
+-keep class **.help.CacheManager{*;}
+# StrResponse
+-keep class **.help.http.StrResponse{*;}
 
 -dontwarn rx.**
 -dontwarn okio.**
@@ -163,9 +174,11 @@
 -dontwarn okhttp3.**
 -dontwarn org.conscrypt.**
 -dontwarn com.jeremyliao.liveeventbus.**
+-dontwarn org.commonmark.ext.gfm.**
 
--keep class com.google.gson.** { *; }
--keep class com.ke.gson.** { *; }
+-keep,allowobfuscation,allowshrinking class com.google.gson.** { *; }
+-keep,allowobfuscation,allowshrinking class com.ke.gson.** { *; }
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
 -keep class com.jeremyliao.liveeventbus.** { *; }
 -keep class okhttp3.**{*;}
 -keep class okio.**{*;}
@@ -178,9 +191,11 @@
 -keep class tyrantgit.explosionfield.**{*;}
 -keep class freemarker.**{*;}
 -keep class com.gyf.barlibrary.** {*;}
-##JSOUP
+
+## JSOUP
 -keep class org.jsoup.**{*;}
 -keep class **.xpath.**{*;}
+-dontwarn org.jspecify.annotations.NullMarked
 
 -keep class org.slf4j.**{*;}
 -dontwarn org.slf4j.**
@@ -201,11 +216,37 @@
 -dontwarn sun.reflect.**
 
 ## Rhino
+-keep class com.script.** { *; }
 -keep class javax.script.** { *; }
+-keep class java.lang.** { *; }
+-keep class java.util.function.** { *; }
 -keep class com.sun.script.javascript.** { *; }
--keep class org.mozilla.javascript.** { *; }
+-keep class org.mozilla.** { *; }
+-dontwarn org.mozilla.javascript.engine.RhinoScriptEngineFactory
+### 以下内容是更新rhino1.7.14.jar后IDE提示添加的
+-dontwarn java.beans.**
+-dontwarn javax.script.**
+### 以下内容是更新rhino1.8.0.jar后IDE提示添加的
+-dontwarn jdk.dynalink.CallSiteDescriptor
+-dontwarn jdk.dynalink.DynamicLinker
+-dontwarn jdk.dynalink.DynamicLinkerFactory
+-dontwarn jdk.dynalink.NamedOperation
+-dontwarn jdk.dynalink.Namespace
+-dontwarn jdk.dynalink.NamespaceOperation
+-dontwarn jdk.dynalink.Operation
+-dontwarn jdk.dynalink.RelinkableCallSite
+-dontwarn jdk.dynalink.StandardNamespace
+-dontwarn jdk.dynalink.StandardOperation
+-dontwarn jdk.dynalink.linker.GuardedInvocation
+-dontwarn jdk.dynalink.linker.GuardingDynamicLinker
+-dontwarn jdk.dynalink.linker.LinkRequest
+-dontwarn jdk.dynalink.linker.LinkerServices
+-dontwarn jdk.dynalink.linker.TypeBasedGuardingDynamicLinker
+-dontwarn jdk.dynalink.linker.support.CompositeTypeBasedGuardingDynamicLinker
+-dontwarn jdk.dynalink.linker.support.Guards
+-dontwarn jdk.dynalink.support.ChainedCallSite
 
-###EPUB
+## EPUB
 -dontwarn nl.siegmann.epublib.**
 -dontwarn org.xmlpull.**
 -keep class nl.siegmann.epublib.**{*;}
@@ -223,12 +264,31 @@
     public static ** valueOf(java.lang.String);
 }
 
+## ExoPlayer 反射设置ua 保证该私有变量不被混淆
+-keepclassmembers class androidx.media3.datasource.cache.CacheDataSource$Factory {
+    *** upstreamDataSourceFactory;
+}
+## ExoPlayer 如果还不能播放就取消注释这个
+# -keep class com.google.android.exoplayer2.** {*;}
 
-# Keep all of Cronet API as it's used by the Cronet module.
--keep public class org.chromium.net.* {
-    !private *;
-    *;
+## 对外提供api
+-keep class io.legado.app.api.ReturnData{*;}
+
+# 繁简转换
+-keep class com.github.liuyueyi.quick.transfer.** {*;}
+
+# Cronet
+-keepclassmembers class org.chromium.net.X509Util {
+    *** sDefaultTrustManager;
+    *** sTestTrustManager;
 }
 
-## 保证该私有变量不被混淆
--keepclassmembers class com.google.android.exoplayer2.upstream.cache.CacheDataSource$Factory{upstreamDataSourceFactory;}
+# Class.forName调用
+-keep class io.legado.app.lib.cronet.CronetInterceptor{*;}
+-keep class io.legado.app.lib.cronet.CronetLoader{*;}
+-keep class io.legado.app.help.update.AppUpdateGitHub{*;}
+-keep class io.legado.app.help.AppIntentType{*;}
+# Error Exception 
+-keep class * extends java.lang.Exception
+-keep class * extends java.lang.Error
+-keep class **Exception

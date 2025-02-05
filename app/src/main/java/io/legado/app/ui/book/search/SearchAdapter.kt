@@ -3,6 +3,7 @@ package io.legado.app.ui.book.search
 import android.content.Context
 import android.os.Bundle
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import io.legado.app.R
 import io.legado.app.base.adapter.DiffRecyclerAdapter
@@ -16,6 +17,8 @@ import io.legado.app.utils.visible
 
 class SearchAdapter(context: Context, val callBack: CallBack) :
     DiffRecyclerAdapter<SearchBook, ItemSearchBinding>(context) {
+
+    override val keepScrollPosition = true
 
     override val diffItemCallback: DiffUtil.ItemCallback<SearchBook>
         get() = object : DiffUtil.ItemCallback<SearchBook>() {
@@ -58,18 +61,20 @@ class SearchAdapter(context: Context, val callBack: CallBack) :
         item: SearchBook,
         payloads: MutableList<Any>
     ) {
-        val bundle = payloads.getOrNull(0) as? Bundle
-        if (bundle == null) {
+        if (payloads.isEmpty()) {
             bind(binding, item)
         } else {
-            bindChange(binding, item, bundle)
+            for (i in payloads.indices) {
+                val bundle = payloads[i] as Bundle
+                bindChange(binding, item, bundle)
+            }
         }
     }
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemSearchBinding) {
         binding.root.setOnClickListener {
             getItem(holder.layoutPosition)?.let {
-                callBack.showBookInfo(it.name, it.author)
+                callBack.showBookInfo(it.name, it.author, it.bookUrl)
             }
         }
     }
@@ -78,6 +83,8 @@ class SearchAdapter(context: Context, val callBack: CallBack) :
         binding.run {
             tvName.text = searchBook.name
             tvAuthor.text = context.getString(R.string.author_show, searchBook.author)
+            ivInBookshelf.isVisible =
+                callBack.isInBookshelf(searchBook.name, searchBook.author)
             bvOriginCount.setBadgeCount(searchBook.origins.size)
             upLasted(binding, searchBook.latestChapterTitle)
             tvIntroduce.text = searchBook.trimIntro(context)
@@ -94,13 +101,21 @@ class SearchAdapter(context: Context, val callBack: CallBack) :
 
     private fun bindChange(binding: ItemSearchBinding, searchBook: SearchBook, bundle: Bundle) {
         binding.run {
-            bundle.keySet().map {
+            bundle.keySet().forEach {
                 when (it) {
                     "origins" -> bvOriginCount.setBadgeCount(searchBook.origins.size)
                     "last" -> upLasted(binding, searchBook.latestChapterTitle)
                     "intro" -> tvIntroduce.text = searchBook.trimIntro(context)
                     "kind" -> upKind(binding, searchBook.getKindList())
-                    "cover" -> ivCover.load(searchBook.coverUrl, searchBook.name, searchBook.author, false, searchBook.origin)
+                    "isInBookshelf" -> ivInBookshelf.isVisible =
+                        callBack.isInBookshelf(searchBook.name, searchBook.author)
+                    "cover" -> ivCover.load(
+                        searchBook.coverUrl,
+                        searchBook.name,
+                        searchBook.author,
+                        false,
+                        searchBook.origin
+                    )
                 }
             }
         }
@@ -128,6 +143,15 @@ class SearchAdapter(context: Context, val callBack: CallBack) :
     }
 
     interface CallBack {
-        fun showBookInfo(name: String, author: String)
+
+        /**
+         * 是否已经加入书架
+         */
+        fun isInBookshelf(name: String, author: String): Boolean
+
+        /**
+         * 显示书籍详情
+         */
+        fun showBookInfo(name: String, author: String, bookUrl: String)
     }
 }

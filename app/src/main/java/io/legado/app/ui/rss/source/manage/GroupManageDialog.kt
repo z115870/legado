@@ -8,12 +8,12 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.DialogRecyclerViewBinding
@@ -23,8 +23,11 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.*
+import io.legado.app.utils.applyTint
+import io.legado.app.utils.requestInputMethod
+import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.utils.visible
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
@@ -59,13 +62,9 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     }
 
     private fun initData() {
-        launch {
-            appDb.rssSourceDao.flowGroup().conflate().collect {
-                val groups = linkedSetOf<String>()
-                it.map { group ->
-                    groups.addAll(group.splitNotBlank(AppPattern.splitGroupRegex))
-                }
-                adapter.setItems(groups.toList())
+        lifecycleScope.launch {
+            appDb.rssSourceDao.flowGroups().conflate().collect {
+                adapter.setItems(it)
             }
         }
     }

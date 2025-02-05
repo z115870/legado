@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.PorterDuff
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -17,7 +18,13 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.searchContent.SearchResult
-import io.legado.app.utils.*
+import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.activity
+import io.legado.app.utils.invisible
+import io.legado.app.utils.loadAnimation
+import io.legado.app.utils.navigationBarGravity
+import io.legado.app.utils.navigationBarHeight
+import io.legado.app.utils.visible
 import splitties.views.bottomPadding
 import splitties.views.leftPadding
 import splitties.views.padding
@@ -33,16 +40,15 @@ class SearchMenu @JvmOverloads constructor(
     private val callBack: CallBack get() = activity as CallBack
     private val binding = ViewSearchMenuBinding.inflate(LayoutInflater.from(context), this, true)
 
-    private val menuBottomIn: Animation =
-        AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_bottom_in)
-    private val menuBottomOut: Animation =
-        AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_bottom_out)
+    private val menuBottomIn: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_in)
+    private val menuBottomOut: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_out)
     private val bgColor: Int = context.bottomBackground
     private val textColor: Int = context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
     private val bottomBackgroundList: ColorStateList =
         Selector.colorBuild().setDefaultColor(bgColor)
             .setPressedColor(ColorUtils.darkenColor(bgColor)).create()
     private var onMenuOutEnd: (() -> Unit)? = null
+    private var isMenuOutAnimating = false
 
     private val searchResultList: MutableList<SearchResult> = mutableListOf()
     private var currentSearchResultIndex: Int = -1
@@ -53,6 +59,7 @@ class SearchMenu @JvmOverloads constructor(
         get() = searchResultList.getOrNull(currentSearchResultIndex)
     val previousSearchResult: SearchResult?
         get() = searchResultList.getOrNull(lastSearchResultIndex)
+    val bottomMenuVisible get() = isVisible && binding.llBottomMenu.isVisible
 
     init {
         initAnimation()
@@ -72,37 +79,35 @@ class SearchMenu @JvmOverloads constructor(
         tvCurrentSearchInfo.setTextColor(bottomBackgroundList)
         llBottomBg.setBackgroundColor(bgColor)
         fabLeft.backgroundTintList = bottomBackgroundList
-        fabLeft.setColorFilter(textColor)
+        fabLeft.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         fabRight.backgroundTintList = bottomBackgroundList
-        fabRight.setColorFilter(textColor)
+        fabRight.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvMainMenu.setTextColor(textColor)
         tvSearchResults.setTextColor(textColor)
         tvSearchExit.setTextColor(textColor)
-        //tvSetting.setTextColor(textColor)
-        ivMainMenu.setColorFilter(textColor)
-        ivSearchResults.setColorFilter(textColor)
-        ivSearchExit.setColorFilter(textColor)
-        //ivSetting.setColorFilter(textColor)
-        ivSearchContentUp.setColorFilter(textColor)
-        ivSearchContentDown.setColorFilter(textColor)
+        ivMainMenu.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        ivSearchResults.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        ivSearchExit.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        ivSearchContentUp.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        ivSearchContentDown.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvCurrentSearchInfo.setTextColor(textColor)
     }
 
 
     fun runMenuIn() {
         this.visible()
-        binding.llSearchBaseInfo.visible()
-        binding.llBottomBg.visible()
+        binding.llBottomMenu.visible()
         binding.vwMenuBg.visible()
-        binding.llSearchBaseInfo.startAnimation(menuBottomIn)
-        binding.llBottomBg.startAnimation(menuBottomIn)
+        binding.llBottomMenu.startAnimation(menuBottomIn)
     }
 
     fun runMenuOut(onMenuOutEnd: (() -> Unit)? = null) {
+        if (isMenuOutAnimating) {
+            return
+        }
         this.onMenuOutEnd = onMenuOutEnd
         if (this.isVisible) {
-            binding.llSearchBaseInfo.startAnimation(menuBottomOut)
-            binding.llBottomBg.startAnimation(menuBottomOut)
+            binding.llBottomMenu.startAnimation(menuBottomOut)
         }
     }
 
@@ -148,22 +153,34 @@ class SearchMenu @JvmOverloads constructor(
 
         fabLeft.setOnClickListener {
             updateSearchResultIndex(currentSearchResultIndex - 1)
-            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+            callBack.navigateToSearch(
+                searchResultList[currentSearchResultIndex],
+                currentSearchResultIndex
+            )
         }
 
         ivSearchContentUp.setOnClickListener {
             updateSearchResultIndex(currentSearchResultIndex - 1)
-            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+            callBack.navigateToSearch(
+                searchResultList[currentSearchResultIndex],
+                currentSearchResultIndex
+            )
         }
 
         ivSearchContentDown.setOnClickListener {
             updateSearchResultIndex(currentSearchResultIndex + 1)
-            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+            callBack.navigateToSearch(
+                searchResultList[currentSearchResultIndex],
+                currentSearchResultIndex
+            )
         }
 
         fabRight.setOnClickListener {
             updateSearchResultIndex(currentSearchResultIndex + 1)
-            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+            callBack.navigateToSearch(
+                searchResultList[currentSearchResultIndex],
+                currentSearchResultIndex
+            )
         }
     }
 
@@ -201,12 +218,13 @@ class SearchMenu @JvmOverloads constructor(
         //隐藏菜单
         menuBottomOut.setAnimationListener(object : Animation.AnimationListener {
             override fun onAnimationStart(animation: Animation) {
+                isMenuOutAnimating = true
                 binding.vwMenuBg.setOnClickListener(null)
             }
 
             override fun onAnimationEnd(animation: Animation) {
-                binding.llSearchBaseInfo.invisible()
-                binding.llBottomBg.invisible()
+                isMenuOutAnimating = false
+                binding.llBottomMenu.invisible()
                 binding.vwMenuBg.invisible()
                 binding.vwMenuBg.setOnClickListener { runMenuOut() }
 
@@ -225,7 +243,9 @@ class SearchMenu @JvmOverloads constructor(
         fun upSystemUiVisibility()
         fun exitSearchMenu()
         fun showMenuBar()
-        fun navigateToSearch(searchResult: SearchResult)
+        fun navigateToSearch(searchResult: SearchResult, index: Int)
+        fun onMenuShow()
+        fun onMenuHide()
     }
 
 }

@@ -1,5 +1,6 @@
 package io.legado.app.data.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Ignore
 import io.legado.app.utils.GSON
@@ -21,6 +22,8 @@ data class RssStar(
     var description: String? = null,
     var content: String? = null,
     var image: String? = null,
+    @ColumnInfo(defaultValue = "默认分组")
+    var group: String = "默认分组",
     override var variable: String? = null
 ) : BaseRssArticle {
 
@@ -39,6 +42,8 @@ data class RssStar(
         pubDate = pubDate,
         description = description,
         content = content,
-        image = image
+        image = image,
+        group = group,
+        variable = variable
     )
 }
