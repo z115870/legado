@@ -15,6 +15,7 @@ import io.legado.app.service.AudioPlayService
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.utils.LogUtils
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
 
@@ -33,14 +34,18 @@ class MediaButtonReceiver : BroadcastReceiver() {
 
     companion object {
 
+        private const val TAG = "MediaButtonReceiver"
+
         fun handleIntent(context: Context, intent: Intent): Boolean {
             val intentAction = intent.action
             if (Intent.ACTION_MEDIA_BUTTON == intentAction) {
+                @Suppress("DEPRECATION")
                 val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
                     ?: return false
                 val keycode: Int = keyEvent.keyCode
                 val action: Int = keyEvent.action
                 if (action == KeyEvent.ACTION_DOWN) {
+                    LogUtils.d(TAG, "Receive mediaButton event, keycode:$keycode")
                     when (keycode) {
                         KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
                             if (context.getPrefBoolean("mediaButtonPerNext", false)) {
@@ -49,6 +54,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
                                 ReadAloud.prevParagraph(context)
                             }
                         }
+
                         KeyEvent.KEYCODE_MEDIA_NEXT -> {
                             if (context.getPrefBoolean("mediaButtonPerNext", false)) {
                                 ReadBook.moveToNextChapter(true)
@@ -56,6 +62,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
                                 ReadAloud.nextParagraph(context)
                             }
                         }
+
                         else -> readAloud(context)
                     }
                 }
@@ -74,6 +81,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
                         AudioPlay.resume(context)
                     }
                 }
+
                 AudioPlayService.isRun -> {
                     if (AudioPlayService.pause) {
                         AudioPlay.resume(context)
@@ -81,10 +89,17 @@ class MediaButtonReceiver : BroadcastReceiver() {
                         AudioPlay.pause(context)
                     }
                 }
+
+                isMediaKey && !AppConfig.readAloudByMediaButton -> {
+                    // break
+                }
+
                 LifecycleHelp.isExistActivity(ReadBookActivity::class.java) ->
                     postEvent(EventBus.MEDIA_BUTTON, true)
+
                 LifecycleHelp.isExistActivity(AudioPlayActivity::class.java) ->
                     postEvent(EventBus.MEDIA_BUTTON, true)
+
                 else -> if (AppConfig.mediaButtonOnExit || LifecycleHelp.activitySize() > 0 || !isMediaKey) {
                     ReadAloud.upReadAloudClass()
                     if (ReadBook.book != null) {

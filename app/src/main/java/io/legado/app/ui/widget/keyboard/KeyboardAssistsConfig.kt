@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -14,12 +15,14 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.databinding.DialogMultipleEditTextBinding
 import io.legado.app.databinding.DialogRecyclerViewBinding
 import io.legado.app.databinding.Item1lineTextAndDelBinding
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
@@ -29,8 +32,13 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
+/**
+ * 辅助按键配置
+ */
 class KeyboardAssistsConfig : BaseDialogFragment(R.layout.dialog_recycler_view),
     Toolbar.OnMenuItemClickListener {
 
@@ -67,8 +75,10 @@ class KeyboardAssistsConfig : BaseDialogFragment(R.layout.dialog_recycler_view),
     }
 
     private fun initData() {
-        launch {
-            appDb.keyboardAssistsDao.flowAll.collect {
+        lifecycleScope.launch {
+            appDb.keyboardAssistsDao.flowAll.catch {
+                AppLog.put("辅助按键配置获取数据失败\n${it.localizedMessage}", it)
+            }.flowOn(IO).collect {
                 adapter.setItems(it)
             }
         }
@@ -94,7 +104,7 @@ class KeyboardAssistsConfig : BaseDialogFragment(R.layout.dialog_recycler_view),
             setCustomView(alertBinding.root)
             cancelButton()
             okButton {
-                launch(IO) {
+                lifecycleScope.launch(IO) {
                     val newKeyboardAssist = KeyboardAssist(
                         key = alertBinding.edit1.text.toString(),
                         value = alertBinding.edit2.text.toString()
@@ -131,6 +141,7 @@ class KeyboardAssistsConfig : BaseDialogFragment(R.layout.dialog_recycler_view),
             item: KeyboardAssist,
             payloads: MutableList<Any>
         ) {
+            binding.root.setBackgroundColor(context.backgroundColor)
             binding.textView.text = item.key
         }
 
@@ -142,7 +153,7 @@ class KeyboardAssistsConfig : BaseDialogFragment(R.layout.dialog_recycler_view),
             }
             binding.ivDelete.setOnClickListener {
                 getItemByLayoutPosition(holder.layoutPosition)?.let { keyboardAssist ->
-                    launch(IO) {
+                    lifecycleScope.launch(IO) {
                         appDb.keyboardAssistsDao.delete(keyboardAssist)
                     }
                 }
@@ -160,7 +171,7 @@ class KeyboardAssistsConfig : BaseDialogFragment(R.layout.dialog_recycler_view),
                 for ((index, item) in getItems().withIndex()) {
                     item.serialNo = index + 1
                 }
-                launch(IO) {
+                lifecycleScope.launch(IO) {
                     appDb.keyboardAssistsDao.update(*getItems().toTypedArray())
                 }
             }

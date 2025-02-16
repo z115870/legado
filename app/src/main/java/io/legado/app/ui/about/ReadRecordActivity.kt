@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
+import androidx.appcompat.widget.SearchView
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.base.adapter.ItemViewHolder
@@ -14,25 +16,42 @@ import io.legado.app.data.entities.ReadRecordShow
 import io.legado.app.databinding.ActivityReadRecordBinding
 import io.legado.app.databinding.ItemReadRecordBinding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.book.manga.ReadMangaActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.search.SearchActivity
+import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
-import io.legado.app.utils.startActivity
+import io.legado.app.utils.getInt
+import io.legado.app.utils.putInt
+import io.legado.app.utils.startReadOrMangaActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
 
     private val adapter by lazy { RecordAdapter(this) }
-    private var sortMode = 0
+    private var sortMode
+        get() = LocalConfig.getInt("readRecordSort")
+        set(value) {
+            LocalConfig.putInt("readRecordSort", value)
+        }
+    private val searchView: SearchView by lazy {
+        binding.titleBar.findViewById(R.id.search_view)
+    }
 
     override val binding by viewBinding(ActivityReadRecordBinding::inflate)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initView()
+        initAllTime()
         initData()
     }
 
@@ -43,6 +62,11 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
 
     override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
         menu.findItem(R.id.menu_enable_record)?.isChecked = AppConfig.enableReadRecord
+        when (sortMode) {
+            1 -> menu.findItem(R.id.menu_sort_read_long)?.isChecked = true
+            2 -> menu.findItem(R.id.menu_sort_read_time)?.isChecked = true
+            else -> menu.findItem(R.id.menu_sort_name)?.isChecked = true
+        }
         return super.onMenuOpened(featureId, menu)
     }
 
@@ -50,12 +74,22 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
         when (item.itemId) {
             R.id.menu_sort_name -> {
                 sortMode = 0
+                item.isChecked = true
                 initData()
             }
-            R.id.menu_sort_time -> {
+
+            R.id.menu_sort_read_long -> {
                 sortMode = 1
+                item.isChecked = true
                 initData()
             }
+
+            R.id.menu_sort_read_time -> {
+                sortMode = 2
+                item.isChecked = true
+                initData()
+            }
+
             R.id.menu_enable_record -> {
                 AppConfig.enableReadRecord = !item.isChecked
             }
@@ -63,10 +97,10 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
         return super.onCompatOptionsItemSelected(item)
     }
 
-    private fun initView() = binding.run {
-        readRecord.tvBookName.setText(R.string.all_read_time)
-        recyclerView.adapter = adapter
-        readRecord.tvRemove.setOnClickListener {
+    private fun initView() {
+        initSearchView()
+        binding.tvBookName.setText(R.string.all_read_time)
+        binding.tvRemove.setOnClickListener {
             alert(R.string.delete, R.string.sure_del) {
                 yesButton {
                     appDb.readRecordDao.clear()
@@ -75,18 +109,43 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
                 noButton()
             }
         }
+        binding.recyclerView.adapter = adapter
+        binding.recyclerView.applyNavigationBarPadding()
     }
 
-    private fun initData() {
-        launch {
+    private fun initSearchView() {
+        searchView.applyTint(primaryTextColor)
+        searchView.isSubmitButtonEnabled = true
+        searchView.queryHint = getString(R.string.search)
+        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String): Boolean {
+                searchView.clearFocus()
+                return false
+            }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                initData(newText)
+                return false
+            }
+        })
+    }
+
+    private fun initAllTime() {
+        lifecycleScope.launch {
             val allTime = withContext(IO) {
                 appDb.readRecordDao.allTime
             }
-            binding.readRecord.tvReadTime.text = formatDuring(allTime)
+            binding.tvReadingTime.text = formatDuring(allTime)
+        }
+    }
+
+    private fun initData(searchKey: String? = null) {
+        lifecycleScope.launch {
             val readRecords = withContext(IO) {
-                appDb.readRecordDao.allShow.let { records ->
+                appDb.readRecordDao.search(searchKey ?: "").let { records ->
                     when (sortMode) {
-                        1 -> records.sortedBy { it.readTime }
+                        1 -> records.sortedByDescending { it.readTime }
+                        2 -> records.sortedByDescending { it.lastRead }
                         else -> records.sortedWith { o1, o2 ->
                             o1.bookName.cnCompare(o2.bookName)
                         }
@@ -100,6 +159,8 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
     inner class RecordAdapter(context: Context) :
         RecyclerAdapter<ReadRecordShow, ItemReadRecordBinding>(context) {
 
+        private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
         override fun getViewBinding(parent: ViewGroup): ItemReadRecordBinding {
             return ItemReadRecordBinding.inflate(inflater, parent, false)
         }
@@ -108,11 +169,16 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
             holder: ItemViewHolder,
             binding: ItemReadRecordBinding,
             item: ReadRecordShow,
-            payloads: MutableList<Any>
+            payloads: MutableList<Any>,
         ) {
             binding.apply {
                 tvBookName.text = item.bookName
-                tvReadTime.text = formatDuring(item.readTime)
+                tvReadingTime.text = formatDuring(item.readTime)
+                if (item.lastRead > 0) {
+                    tvLastReadTime.text = dateFormat.format(item.lastRead)
+                } else {
+                    tvLastReadTime.text = ""
+                }
             }
         }
 
@@ -120,14 +186,14 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
             binding.apply {
                 root.setOnClickListener {
                     val item = getItem(holder.layoutPosition) ?: return@setOnClickListener
-                    launch {
+                    lifecycleScope.launch {
                         val book = withContext(IO) {
                             appDb.bookDao.findByName(item.bookName).firstOrNull()
                         }
                         if (book == null) {
                             SearchActivity.start(this@ReadRecordActivity, item.bookName)
                         } else {
-                            startActivity<ReadBookActivity> {
+                            startReadOrMangaActivity<ReadBookActivity, ReadMangaActivity>(book) {
                                 putExtra("bookUrl", book.bookUrl)
                             }
                         }

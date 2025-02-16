@@ -25,6 +25,13 @@
         <item>E-Ink(墨水屏)</item>
     </string-array>
 
+    <string-array name="double_page_title">
+        <item>全局单页</item>
+        <item>全局双页</item>
+        <item>横屏双页</item>
+        <item>平板/横屏双页</item>
+    </string-array>
+
     <string-array name="NavBarColors">
         <item>自动</item>
         <item>黑色</item>
@@ -35,8 +42,8 @@
     <string-array name="screen_time_out">
         <item>默认</item>
         <item>1分钟</item>
-        <item>2分钟</item>
-        <item>3分钟</item>
+        <item>5分钟</item>
+        <item>10分钟</item>
         <item>常亮</item>
     </string-array>
 
@@ -70,7 +77,8 @@
         <item>电量</item>
         <item>电量%</item>
         <item>页数</item>
-        <item>进度</item>
+        <item>进度(%)</item>
+        <item>进度(xx/yyy)</item>
         <item>页数及进度</item>
         <item>时间及电量</item>
         <item>时间及电量%</item>
@@ -93,6 +101,17 @@
         <item>书源</item>
         <item>订阅源</item>
         <item>替换规则</item>
+    </string-array>
+
+    <string-array name="tip_color">
+        <item>跟随内容</item>
+        <item>自定义</item>
+    </string-array>
+
+    <string-array name="tip_divider_color">
+        <item>默认</item>
+        <item>跟随内容</item>
+        <item>自定义</item>
     </string-array>
 
 </resources>

@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -45,7 +46,7 @@ class GroupSelectDialog() : BaseDialogFragment(R.layout.dialog_book_group_picker
     private var requestCode: Int = -1
     private val viewModel: GroupViewModel by viewModels()
     private val adapter by lazy { GroupAdapter(requireContext()) }
-    private var callBack: CallBack? = null
+    private val callBack get() = (activity as? CallBack)
     private var groupId: Long = 0
 
     override fun onStart() {
@@ -55,7 +56,6 @@ class GroupSelectDialog() : BaseDialogFragment(R.layout.dialog_book_group_picker
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
-        callBack = activity as? CallBack
         arguments?.let {
             groupId = it.getLong("groupId")
             requestCode = it.getInt("requestCode", -1)
@@ -86,7 +86,7 @@ class GroupSelectDialog() : BaseDialogFragment(R.layout.dialog_book_group_picker
     }
 
     private fun initData() {
-        launch {
+        lifecycleScope.launch {
             appDb.bookGroupDao.flowSelect().conflate().collect {
                 adapter.setItems(it)
             }

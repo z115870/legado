@@ -15,8 +15,8 @@ class ChangeChapterSourceViewModel(application: Application) :
     var chapterIndex: Int = 0
     var chapterTitle: String = ""
 
-    override fun initData(arguments: Bundle?) {
-        super.initData(arguments)
+    override fun initData(arguments: Bundle?, book: Book?, fromReadBookActivity: Boolean) {
+        super.initData(arguments, book, fromReadBookActivity)
         arguments?.let { bundle ->
             bundle.getString("chapterTitle")?.let {
                 chapterTitle = it
@@ -35,7 +35,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         execute {
             val bookSource = appDb.bookSourceDao.getBookSource(book.origin)
                 ?: throw NoStackTraceException("书源不存在")
-            WebBook.getContentAwait(this, bookSource, book, chapter, nextChapterUrl, false)
+            WebBook.getContentAwait(bookSource, book, chapter, nextChapterUrl, false)
         }.onSuccess {
             success.invoke(it)
         }.onError {

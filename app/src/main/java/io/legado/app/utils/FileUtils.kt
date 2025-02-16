@@ -4,7 +4,6 @@ import android.os.Environment
 import android.webkit.MimeTypeMap
 import androidx.annotation.IntDef
 import splitties.init.appCtx
-
 import java.io.*
 import java.nio.charset.Charset
 import java.text.SimpleDateFormat
@@ -95,7 +94,6 @@ object FileUtils {
     }
 
     fun getSdCardPath(): String {
-        @Suppress("DEPRECATION")
         var sdCardDirectory = Environment.getExternalStorageDirectory().absolutePath
         try {
             sdCardDirectory = File(sdCardDirectory).canonicalPath
@@ -115,7 +113,7 @@ object FileUtils {
     const val BY_EXTENSION_DESC = 7
 
     @IntDef(value = [BY_NAME_ASC, BY_NAME_DESC, BY_TIME_ASC, BY_TIME_DESC, BY_SIZE_ASC, BY_SIZE_DESC, BY_EXTENSION_ASC, BY_EXTENSION_DESC])
-    @kotlin.annotation.Retention(AnnotationRetention.SOURCE)
+    @Retention(AnnotationRetention.SOURCE)
     annotation class SortType
 
     /**
@@ -553,15 +551,15 @@ object FileUtils {
     /**
      * 获取文件或网址的名称（包括后缀）
      */
-    fun getName(pathOrUrl: String?): String {
-        if (pathOrUrl == null) {
+    fun getName(path: String?): String {
+        if (path == null) {
             return ""
         }
-        val pos = pathOrUrl.lastIndexOf('/')
+        val pos = path.lastIndexOf(File.separator)
         return if (0 <= pos) {
-            pathOrUrl.substring(pos + 1)
+            path.substring(pos + 1)
         } else {
-            System.currentTimeMillis().toString() + "." + getExtension(pathOrUrl)
+            path
         }
     }
 

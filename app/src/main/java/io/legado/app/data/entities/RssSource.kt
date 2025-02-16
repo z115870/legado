@@ -1,14 +1,14 @@
 package io.legado.app.data.entities
 
 import android.os.Parcelable
+import android.text.TextUtils
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.jayway.jsonpath.DocumentContext
-import io.legado.app.utils.*
+import io.legado.app.constant.AppPattern
+import io.legado.app.utils.splitNotBlank
 import kotlinx.parcelize.Parcelize
-import splitties.init.appCtx
 
 @Parcelize
 @Entity(tableName = "rssSources", indices = [(Index(value = ["sourceUrl"], unique = false))])
@@ -27,36 +27,70 @@ data class RssSource(
     var enabled: Boolean = true,
     // 自定义变量说明
     var variableComment: String? = null,
+    // js库
+    override var jsLib: String? = null,
+    // 启用okhttp CookieJAr 自动保存每次请求的cookie
     @ColumnInfo(defaultValue = "0")
-    override var enabledCookieJar: Boolean? = false,
-    //并发率
+    override var enabledCookieJar: Boolean? = true,
+    /**并发率**/
     override var concurrentRate: String? = null,
-    // 请求头
+    /**请求头**/
     override var header: String? = null,
-    // 登录地址
+    /**登录地址**/
     override var loginUrl: String? = null,
-    //登录UI
+    /**登录Ui**/
     override var loginUi: String? = null,
-    //登录检测js
+    /**登录检测js**/
     var loginCheckJs: String? = null,
+    /**封面解密js**/
+    var coverDecodeJs: String? = null,
+    /**分类Url**/
     var sortUrl: String? = null,
+    /**是否单url源**/
     var singleUrl: Boolean = false,
     /*列表规则*/
-    //列表样式,0,1,2
+    /**列表样式,0,1,2**/
+    @ColumnInfo(defaultValue = "0")
     var articleStyle: Int = 0,
+    /**列表规则**/
     var ruleArticles: String? = null,
+    /**下一页规则**/
     var ruleNextPage: String? = null,
+    /**标题规则**/
     var ruleTitle: String? = null,
+    /**发布日期规则**/
     var rulePubDate: String? = null,
     /*webView规则*/
+    /**描述规则**/
     var ruleDescription: String? = null,
+    /**图片规则**/
     var ruleImage: String? = null,
+    /**链接规则**/
     var ruleLink: String? = null,
+    /**正文规则**/
     var ruleContent: String? = null,
+    /**正文url白名单**/
+    var contentWhitelist: String? = null,
+    /**正文url黑名单**/
+    var contentBlacklist: String? = null,
+    /**
+     * 跳转url拦截,
+     * js, 返回true拦截,js变量url,可以通过js打开url,比如调用阅读搜索,添加书架等,简化规则写法,不用webView js注入
+     * **/
+    var shouldOverrideUrlLoading: String? = null,
+    /**webView样式**/
     var style: String? = null,
+    @ColumnInfo(defaultValue = "1")
     var enableJs: Boolean = true,
+    @ColumnInfo(defaultValue = "1")
     var loadWithBaseUrl: Boolean = true,
+    /**注入js**/
+    var injectJs: String? = null,
     /*其它规则*/
+    /**最后更新时间，用于排序**/
+    @ColumnInfo(defaultValue = "0")
+    var lastUpdateTime: Long = 0,
+    @ColumnInfo(defaultValue = "0")
     var customOrder: Int = 0
 ) : Parcelable, BaseSource {
 
@@ -79,6 +113,7 @@ data class RssSource(
 
     fun equal(source: RssSource): Boolean {
         return equal(sourceUrl, source.sourceUrl)
+                && equal(sourceName, source.sourceName)
                 && equal(sourceIcon, source.sourceIcon)
                 && enabled == source.enabled
                 && equal(sourceGroup, source.sourceGroup)
@@ -89,6 +124,7 @@ data class RssSource(
                 && equal(loginUrl, source.loginUrl)
                 && equal(loginUi, source.loginUi)
                 && equal(loginCheckJs, source.loginCheckJs)
+                && equal(coverDecodeJs, source.coverDecodeJs)
                 && equal(sortUrl, source.sortUrl)
                 && singleUrl == source.singleUrl
                 && articleStyle == source.articleStyle
@@ -101,6 +137,9 @@ data class RssSource(
                 && equal(ruleContent, source.ruleContent)
                 && enableJs == source.enableJs
                 && loadWithBaseUrl == source.loadWithBaseUrl
+                && equal(variableComment, source.variableComment)
+                && equal(style, source.style)
+                && equal(injectJs, source.injectJs)
     }
 
     private fun equal(a: String?, b: String?): Boolean {
@@ -115,33 +154,21 @@ data class RssSource(
         }
     }
 
-    fun sortUrls(): List<Pair<String, String>> = arrayListOf<Pair<String, String>>().apply {
-        kotlin.runCatching {
-            var a = sortUrl
-            if (sortUrl?.startsWith("<js>", false) == true
-                || sortUrl?.startsWith("@js:", false) == true
-            ) {
-                val aCache = ACache.get(appCtx, "rssSortUrl")
-                a = aCache.getAsString(sourceUrl) ?: ""
-                if (a.isBlank()) {
-                    val jsStr = if (sortUrl!!.startsWith("@")) {
-                        sortUrl!!.substring(4)
-                    } else {
-                        sortUrl!!.substring(4, sortUrl!!.lastIndexOf("<"))
-                    }
-                    a = evalJS(jsStr).toString()
-                    aCache.put(sourceUrl, a)
-                }
-            }
-            a?.split("(&&|\n)+".toRegex())?.forEach { c ->
-                val d = c.split("::")
-                if (d.size > 1)
-                    add(Pair(d[0], d[1]))
-            }
-            if (isEmpty()) {
-                add(Pair("", sourceUrl))
-            }
+    fun addGroup(groups: String): RssSource {
+        sourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.toHashSet()?.let {
+            it.addAll(groups.splitNotBlank(AppPattern.splitGroupRegex))
+            sourceGroup = TextUtils.join(",", it)
         }
+        if (sourceGroup.isNullOrBlank()) sourceGroup = groups
+        return this
+    }
+
+    fun removeGroup(groups: String): RssSource {
+        sourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.toHashSet()?.let {
+            it.removeAll(groups.splitNotBlank(AppPattern.splitGroupRegex).toSet())
+            sourceGroup = TextUtils.join(",", it)
+        }
+        return this
     }
 
     fun getDisplayVariableComment(otherComment: String): String {
@@ -149,63 +176,6 @@ data class RssSource(
             otherComment
         } else {
             "${variableComment}\n$otherComment"
-        }
-    }
-
-    @Suppress("MemberVisibilityCanBePrivate")
-    companion object {
-
-        fun fromJsonDoc(doc: DocumentContext): Result<RssSource> {
-            return kotlin.runCatching {
-                val loginUi = doc.read<Any>("$.loginUi")
-                RssSource(
-                    sourceUrl = doc.readString("$.sourceUrl")!!,
-                    sourceName = doc.readString("$.sourceName")!!,
-                    sourceIcon = doc.readString("$.sourceIcon") ?: "",
-                    sourceGroup = doc.readString("$.sourceGroup"),
-                    sourceComment = doc.readString("$.sourceComment"),
-                    enabled = doc.readBool("$.enabled") ?: true,
-                    concurrentRate = doc.readString("$.concurrentRate"),
-                    header = doc.readString("$.header"),
-                    loginUrl = doc.readString("$.loginUrl"),
-                    loginUi = if (loginUi is List<*>) GSON.toJson(loginUi) else loginUi?.toString(),
-                    loginCheckJs = doc.readString("$.loginCheckJs"),
-                    sortUrl = doc.readString("$.sortUrl"),
-                    singleUrl = doc.readBool("$.singleUrl") ?: false,
-                    articleStyle = doc.readInt("$.articleStyle") ?: 0,
-                    ruleArticles = doc.readString("$.ruleArticles"),
-                    ruleNextPage = doc.readString("$.ruleNextPage"),
-                    ruleTitle = doc.readString("$.ruleTitle"),
-                    rulePubDate = doc.readString("$.rulePubDate"),
-                    ruleDescription = doc.readString("$.ruleDescription"),
-                    ruleImage = doc.readString("$.ruleImage"),
-                    ruleLink = doc.readString("$.ruleLink"),
-                    ruleContent = doc.readString("$.ruleContent"),
-                    style = doc.readString("$.style"),
-                    enableJs = doc.readBool("$.enableJs") ?: true,
-                    loadWithBaseUrl = doc.readBool("$.loadWithBaseUrl") ?: true,
-                    enabledCookieJar = doc.readBool("$.enabledCookieJar") ?: false,
-                    customOrder = doc.readInt("$.customOrder") ?: 0
-                )
-            }
-        }
-
-        fun fromJson(json: String): Result<RssSource> {
-            return fromJsonDoc(jsonPath.parse(json))
-        }
-
-        fun fromJsonArray(jsonArray: String): Result<ArrayList<RssSource>> {
-            return kotlin.runCatching {
-                val sources = arrayListOf<RssSource>()
-                val doc = jsonPath.parse(jsonArray).read<List<*>>("$")
-                doc.forEach {
-                    val jsonItem = jsonPath.parse(it)
-                    fromJsonDoc(jsonItem).getOrThrow().let { source ->
-                        sources.add(source)
-                    }
-                }
-                sources
-            }
         }
     }
 

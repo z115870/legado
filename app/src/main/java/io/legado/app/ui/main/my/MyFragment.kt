@@ -11,28 +11,44 @@ import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.FragmentMyConfigBinding
-import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.prefs.NameListPreference
-import io.legado.app.lib.prefs.PreferenceCategory
 import io.legado.app.lib.prefs.SwitchPreference
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.service.WebService
 import io.legado.app.ui.about.AboutActivity
-import io.legado.app.ui.about.DonateActivity
 import io.legado.app.ui.about.ReadRecordActivity
 import io.legado.app.ui.book.bookmark.AllBookmarkActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
+import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
+import io.legado.app.ui.dict.rule.DictRuleActivity
+import io.legado.app.ui.file.FileManageActivity
+import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.utils.*
+import io.legado.app.utils.LogUtils
+import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.observeEventSticky
+import io.legado.app.utils.openUrl
+import io.legado.app.utils.putPrefBoolean
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.showHelp
+import io.legado.app.utils.startActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class MyFragment : BaseFragment(R.layout.fragment_my_config) {
+class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInterface {
+
+    constructor(position: Int) : this() {
+        val bundle = Bundle()
+        bundle.putInt("position", position)
+        arguments = bundle
+    }
+
+    override val position: Int? get() = arguments?.getInt("position")
 
     private val binding by viewBinding(FragmentMyConfigBinding::bind)
 
@@ -51,10 +67,7 @@ class MyFragment : BaseFragment(R.layout.fragment_my_config) {
 
     override fun onCompatOptionsItemSelected(item: MenuItem) {
         when (item.itemId) {
-            R.id.menu_help -> {
-                val text = String(requireContext().assets.open("help/appHelp.md").readBytes())
-                showDialogFragment(TextDialog(text, TextDialog.Mode.MD))
-            }
+            R.id.menu_help -> showHelp("appHelp")
         }
     }
 
@@ -67,10 +80,6 @@ class MyFragment : BaseFragment(R.layout.fragment_my_config) {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             putPrefBoolean(PreferKey.webService, WebService.isRun)
             addPreferencesFromResource(R.xml.pref_main)
-            if (AppConfig.isGooglePlay) {
-                findPreference<PreferenceCategory>("aboutCategory")
-                    ?.removePreferenceRecursively("donate")
-            }
             findPreference<SwitchPreference>("webService")?.onLongClick {
                 if (!WebService.isRun) {
                     return@onLongClick false
@@ -128,6 +137,7 @@ class MyFragment : BaseFragment(R.layout.fragment_my_config) {
                         WebService.stop(requireContext())
                     }
                 }
+
                 "recordLog" -> LogUtils.upLevel()
             }
         }
@@ -136,19 +146,25 @@ class MyFragment : BaseFragment(R.layout.fragment_my_config) {
             when (preference.key) {
                 "bookSourceManage" -> startActivity<BookSourceActivity>()
                 "replaceManage" -> startActivity<ReplaceRuleActivity>()
+                "dictRuleManage" -> startActivity<DictRuleActivity>()
+                "txtTocRuleManage" -> startActivity<TxtTocRuleActivity>()
                 "bookmark" -> startActivity<AllBookmarkActivity>()
                 "setting" -> startActivity<ConfigActivity> {
                     putExtra("configTag", ConfigTag.OTHER_CONFIG)
                 }
+
                 "web_dav_setting" -> startActivity<ConfigActivity> {
                     putExtra("configTag", ConfigTag.BACKUP_CONFIG)
                 }
+
                 "theme_setting" -> startActivity<ConfigActivity> {
                     putExtra("configTag", ConfigTag.THEME_CONFIG)
                 }
+
+                "fileManage" -> startActivity<FileManageActivity>()
                 "readRecord" -> startActivity<ReadRecordActivity>()
-                "donate" -> startActivity<DonateActivity>()
                 "about" -> startActivity<AboutActivity>()
+                "exit" -> activity?.finish()
             }
             return super.onPreferenceTreeClick(preference)
         }

@@ -13,7 +13,9 @@ import splitties.init.appCtx
 
 import java.io.IOException
 
-
+/**
+ * web端书源调试
+ */
 class BookSourceDebugWebSocket(handshakeRequest: NanoHTTPD.IHTTPSession) :
     NanoWSD.WebSocket(handshakeRequest),
     CoroutineScope by MainScope(),
@@ -63,6 +65,10 @@ class BookSourceDebugWebSocket(handshakeRequest: NanoHTTPD.IHTTPSession) :
                         Debug.callback = this@BookSourceDebugWebSocket
                         Debug.startDebug(this, it, key)
                     }
+                } else {
+                    send("数据必须为Json格式")
+                    close(NanoWSD.WebSocketFrame.CloseCode.NormalClosure, "调试结束", false)
+                    return@launch
                 }
             }
         }

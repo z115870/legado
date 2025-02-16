@@ -17,6 +17,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.ColorUtils
+import java.util.Collections
 
 
 class RssSourceAdapter(context: Context, val callBack: CallBack) :
@@ -72,18 +73,20 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         payloads: MutableList<Any>
     ) {
         binding.run {
-            val bundle = payloads.getOrNull(0) as? Bundle
-            if (bundle == null) {
+            if (payloads.isEmpty()) {
                 root.setBackgroundColor(ColorUtils.withAlpha(context.backgroundColor, 0.5f))
                 cbSource.text = item.getDisplayNameGroup()
                 swtEnabled.isChecked = item.enabled
                 cbSource.isChecked = selected.contains(item)
             } else {
-                bundle.keySet().map {
-                    when (it) {
-                        "upName" -> cbSource.text = item.getDisplayNameGroup()
-                        "enabled" -> swtEnabled.isChecked = bundle.getBoolean("enabled")
-                        "selected" -> cbSource.isChecked = selected.contains(item)
+                for (i in payloads.indices) {
+                    val bundle = payloads[i] as Bundle
+                    bundle.keySet().map {
+                        when (it) {
+                            "upName" -> cbSource.text = item.getDisplayNameGroup()
+                            "enabled" -> swtEnabled.isChecked = bundle.getBoolean("enabled")
+                            "selected" -> cbSource.isChecked = selected.contains(item)
+                        }
                     }
                 }
             }
@@ -151,6 +154,25 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         callBack.upCountView()
     }
 
+    fun checkSelectedInterval() {
+        val selectedPosition = linkedSetOf<Int>()
+        getItems().forEachIndexed { index, it ->
+            if (selected.contains(it)) {
+                selectedPosition.add(index)
+            }
+        }
+        val minPosition = Collections.min(selectedPosition)
+        val maxPosition = Collections.max(selectedPosition)
+        val itemCount = maxPosition - minPosition + 1
+        for (i in minPosition..maxPosition) {
+            getItem(i)?.let {
+                selected.add(it)
+            }
+        }
+        notifyItemRangeChanged(minPosition, itemCount, bundleOf(Pair("selected", null)))
+        callBack.upCountView()
+    }
+
     private fun showMenu(view: View, position: Int) {
         val source = getItem(position) ?: return
         val popupMenu = PopupMenu(context, view)
@@ -159,7 +181,10 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
             when (menuItem.itemId) {
                 R.id.menu_top -> callBack.toTop(source)
                 R.id.menu_bottom -> callBack.toBottom(source)
-                R.id.menu_del -> callBack.del(source)
+                R.id.menu_del -> {
+                    callBack.del(source)
+                    selected.remove(source)
+                }
             }
             true
         }

@@ -2,13 +2,20 @@ package io.legado.app.utils
 
 import android.annotation.SuppressLint
 import android.text.TextUtils.isEmpty
-
+import android.util.Base64
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
+import java.util.Locale
 import java.util.regex.Matcher
 import java.util.regex.Pattern
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlin.math.abs
+
 
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 object StringUtils {
@@ -16,6 +23,9 @@ object StringUtils {
     private const val DAY_OF_YESTERDAY = 2
     private const val TIME_UNIT = 60
     private val ChnMap = chnMap
+    private val wordCountFormatter by lazy {
+        DecimalFormat("#.#")
+    }
 
     private val chnMap: HashMap<Char, Int>
         get() {
@@ -44,8 +54,7 @@ object StringUtils {
      * 将日期转换成昨天、今天、明天
      */
     fun dateConvert(source: String, pattern: String): String {
-        @SuppressLint("SimpleDateFormat")
-        val format = SimpleDateFormat(pattern)
+        val format = SimpleDateFormat(pattern, Locale.getDefault())
         val calendar = Calendar.getInstance()
         kotlin.runCatching {
             val date = format.parse(source) ?: return ""
@@ -167,17 +176,20 @@ object StringUtils {
                         result = 0
                         tmp = 0
                     }
+
                     tmpNum == 10000 -> {
                         result += tmp
                         result *= tmpNum
                         tmp = 0
                     }
+
                     tmpNum >= 10 -> {
                         if (tmp == 0)
                             tmp = 1
                         result += tmpNum * tmp
                         tmp = 0
                     }
+
                     else -> {
                         tmp = if (i >= 2 && i == cn.size - 1 && ChnMap[cn[i - 1]]!! > 10)
                             tmpNum * ChnMap[cn[i - 1]]!! / 10
@@ -224,16 +236,30 @@ object StringUtils {
         return isNum.matches()
     }
 
+    fun wordCountFormat(words: Int): String {
+        var wordsS = ""
+        if (words > 0) {
+            if (words > 10000) {
+                val df = wordCountFormatter
+                wordsS = df.format(words * 1.0f / 10000f.toDouble()) + "万字"
+            } else {
+                wordsS = words.toString() + "字"
+            }
+        }
+        return wordsS
+    }
+
     fun wordCountFormat(wc: String?): String {
         if (wc == null) return ""
         var wordsS = ""
         if (isNumeric(wc)) {
             val words: Int = wc.toInt()
             if (words > 0) {
-                wordsS = words.toString() + "字"
                 if (words > 10000) {
-                    val df = DecimalFormat("#.#")
+                    val df = wordCountFormatter
                     wordsS = df.format(words * 1.0f / 10000f.toDouble()) + "万字"
+                } else {
+                    wordsS = words.toString() + "字"
                 }
             }
         } else {
@@ -256,7 +282,7 @@ object StringUtils {
         while (start < end && (s[end].code <= 0x20 || s[end] == '　')) {
             --end
         }
-        if (end < len) ++end
+        ++end
         return if (start > 0 || end < len) s.substring(start, end) else s
     }
 
@@ -287,30 +313,58 @@ object StringUtils {
         return buf.toString()
     }
 
-    fun byteToHexString(bytes: ByteArray?): String {
-        if (bytes == null) return ""
-        val sb = StringBuilder(bytes.size * 2)
-        for (b in bytes) {
-            val hex = 0xff and b.toInt()
-            if (hex < 16) {
-                sb.append('0')
+    /**
+     * 压缩字符串
+     */
+    fun compress(str: String): Result<String> {
+        return kotlin.runCatching {
+            if (str.isEmpty()) {
+                return@runCatching str
             }
-            sb.append(Integer.toHexString(hex))
+            val out = ByteArrayOutputStream()
+            var gzip: GZIPOutputStream? = null
+            return@runCatching try {
+                gzip = GZIPOutputStream(out)
+                gzip.write(str.toByteArray())
+                Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            } finally {
+                gzip?.runCatching {
+                    close()
+                }
+                out.runCatching {
+                    close()
+                }
+            }
         }
-        return sb.toString()
     }
 
-    fun hexStringToByte(hexString: String): ByteArray {
-        val hexStr = hexString.replace(" ", "")
-        val len = hexStr.length
-        val bytes = ByteArray(len / 2)
-        var i = 0
-        while (i < len) {
-            // 两位一组，表示一个字节,把这样表示的16进制字符串，还原成一个字节
-            bytes[i / 2] = ((Character.digit(hexString[i], 16) shl 4) +
-                    Character.digit(hexString[i + 1], 16)).toByte()
-            i += 2
+    /**
+     * 解压字符串
+     */
+    @Throws(IOException::class)
+    fun unCompress(str: String): Result<String> {
+        return kotlin.runCatching {
+            val outputStream = ByteArrayOutputStream()
+            var inputStream: ByteArrayInputStream? = null
+            var ginZip: GZIPInputStream? = null
+            return@runCatching try {
+                val compressed = Base64.decode(str, Base64.NO_WRAP)
+                inputStream = ByteArrayInputStream(compressed)
+                ginZip = GZIPInputStream(inputStream)
+                ginZip.copyTo(outputStream)
+                outputStream.toString()
+            } finally {
+                ginZip?.runCatching {
+                    close()
+                }
+                inputStream?.runCatching {
+                    close()
+                }
+                outputStream.runCatching {
+                    close()
+                }
+            }
         }
-        return bytes
     }
+
 }

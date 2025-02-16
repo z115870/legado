@@ -14,7 +14,6 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.constant.AppPattern
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -65,7 +64,7 @@ class ImportBookSourceDialog() : BaseDialogFragment(R.layout.dialog_recycler_vie
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
         binding.toolBar.setTitle(R.string.import_book_source)
-        binding.rotateLoading.show()
+        binding.rotateLoading.visible()
         initMenu()
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
@@ -94,14 +93,14 @@ class ImportBookSourceDialog() : BaseDialogFragment(R.layout.dialog_recycler_vie
             upSelectText()
         }
         viewModel.errorLiveData.observe(this) {
-            binding.rotateLoading.hide()
+            binding.rotateLoading.gone()
             binding.tvMsg.apply {
                 text = it
                 visible()
             }
         }
         viewModel.successLiveData.observe(this) {
-            binding.rotateLoading.hide()
+            binding.rotateLoading.gone()
             if (it > 0) {
                 adapter.setItems(viewModel.allSources)
                 upSelectText()
@@ -139,17 +138,53 @@ class ImportBookSourceDialog() : BaseDialogFragment(R.layout.dialog_recycler_vie
     private fun initMenu() {
         binding.toolBar.setOnMenuItemClickListener(this)
         binding.toolBar.inflateMenu(R.menu.import_source)
-        binding.toolBar.menu.findItem(R.id.menu_Keep_original_name)
+        binding.toolBar.menu.findItem(R.id.menu_keep_original_name)
             ?.isChecked = AppConfig.importKeepName
+        binding.toolBar.menu.findItem(R.id.menu_keep_group)
+            ?.isChecked = AppConfig.importKeepGroup
+        binding.toolBar.menu.findItem(R.id.menu_keep_enable)
+            ?.isChecked = AppConfig.importKeepEnable
     }
 
-    @SuppressLint("InflateParams")
+    @SuppressLint("InflateParams", "NotifyDataSetChanged")
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_new_group -> alertCustomGroup(item)
-            R.id.menu_Keep_original_name -> {
+            R.id.menu_select_new_source -> {
+                val selectAllNew = viewModel.isSelectAllNew
+                viewModel.newSourceStatus.forEachIndexed { index, b ->
+                    if (b) {
+                        viewModel.selectStatus[index] = !selectAllNew
+                    }
+                }
+                adapter.notifyDataSetChanged()
+                upSelectText()
+            }
+
+            R.id.menu_select_update_source -> {
+                val selectAllUpdate = viewModel.isSelectAllUpdate
+                viewModel.updateSourceStatus.forEachIndexed { index, b ->
+                    if (b) {
+                        viewModel.selectStatus[index] = !selectAllUpdate
+                    }
+                }
+                adapter.notifyDataSetChanged()
+                upSelectText()
+            }
+
+            R.id.menu_keep_original_name -> {
                 item.isChecked = !item.isChecked
                 putPrefBoolean(PreferKey.importKeepName, item.isChecked)
+            }
+
+            R.id.menu_keep_group -> {
+                item.isChecked = !item.isChecked
+                putPrefBoolean(PreferKey.importKeepGroup, item.isChecked)
+            }
+
+            R.id.menu_keep_enable -> {
+                item.isChecked = !item.isChecked
+                AppConfig.importKeepEnable = item.isChecked
             }
         }
         return false
@@ -158,10 +193,7 @@ class ImportBookSourceDialog() : BaseDialogFragment(R.layout.dialog_recycler_vie
     private fun alertCustomGroup(item: MenuItem) {
         alert(R.string.diy_edit_source_group) {
             val alertBinding = DialogCustomGroupBinding.inflate(layoutInflater).apply {
-                val groups = linkedSetOf<String>()
-                appDb.bookSourceDao.allGroup.forEach { group ->
-                    groups.addAll(group.splitNotBlank(AppPattern.splitGroupRegex))
-                }
+                val groups = appDb.bookSourceDao.allGroups()
                 textInputLayout.setHint(R.string.group_name)
                 editView.setFilterValues(groups.toList())
                 editView.dropDownHeight = 180.dpToPx()
@@ -189,7 +221,7 @@ class ImportBookSourceDialog() : BaseDialogFragment(R.layout.dialog_recycler_vie
 
     override fun onCodeSave(code: String, requestId: String?) {
         requestId?.toInt()?.let {
-            BookSource.fromJson(code).getOrNull()?.let { source ->
+            GSON.fromJsonObject<BookSource>(code).getOrNull()?.let { source ->
                 viewModel.allSources[it] = source
                 adapter.setItem(it, source)
             }

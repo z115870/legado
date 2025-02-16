@@ -1,27 +1,60 @@
 package io.legado.app.data.entities
 
-import android.util.Base64
-import com.script.SimpleBindings
+import cn.hutool.crypto.symmetric.AES
+import com.script.ScriptBindings
+import com.script.buildScriptBindings
+import com.script.rhino.RhinoScriptEngine
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.help.CacheManager
 import io.legado.app.help.JsExtensions
+import io.legado.app.help.SymmetricCryptoAndroid
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
-import io.legado.app.utils.*
+import io.legado.app.model.SharedJsScope
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonArray
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.has
+import io.legado.app.utils.printOnDebug
+import org.intellij.lang.annotations.Language
+import org.mozilla.javascript.Scriptable
 
 /**
  * 可在js里调用,source.xxx()
  */
 @Suppress("unused")
 interface BaseSource : JsExtensions {
+    /**
+     * 并发率
+     */
+    var concurrentRate: String?
 
-    var concurrentRate: String? // 并发率
-    var loginUrl: String?       // 登录地址
-    var loginUi: String?   // 登录UI
-    var header: String?         // 请求头
-    var enabledCookieJar: Boolean?    //启用cookieJar
+    /**
+     * 登录地址
+     */
+    var loginUrl: String?
+
+    /**
+     * 登录UI
+     */
+    var loginUi: String?
+
+    /**
+     * 请求头
+     */
+    var header: String?
+
+    /**
+     * 启用cookieJar
+     */
+    var enabledCookieJar: Boolean?
+
+    /**
+     * js库
+     */
+    var jsLib: String?
 
     fun getTag(): String
 
@@ -32,10 +65,9 @@ interface BaseSource : JsExtensions {
     }
 
     fun loginUi(): List<RowUi>? {
-        return GSON.fromJsonArray<RowUi>(loginUi)
-            .onFailure {
-                it.printOnDebug()
-            }.getOrNull()
+        return GSON.fromJsonArray<RowUi>(loginUi).onFailure {
+            it.printOnDebug()
+        }.getOrNull()
     }
 
     fun getLoginJs(): String? {
@@ -43,15 +75,26 @@ interface BaseSource : JsExtensions {
         return when {
             loginJs == null -> null
             loginJs.startsWith("@js:") -> loginJs.substring(4)
-            loginJs.startsWith("<js>") ->
-                loginJs.substring(4, loginJs.lastIndexOf("<"))
+            loginJs.startsWith("<js>") -> loginJs.substring(4, loginJs.lastIndexOf("<"))
             else -> loginJs
         }
     }
 
+    /**
+     * 调用login函数 实现登录请求
+     */
     fun login() {
-        getLoginJs()?.let {
-            evalJS(it)
+        val loginJs = getLoginJs()
+        if (!loginJs.isNullOrBlank()) {
+            @Language("js")
+            val js = """$loginJs
+                if(typeof login=='function'){
+                    login.apply(this);
+                } else {
+                    throw('Function login not implements!!!')
+                }
+            """.trimIndent()
+            evalJS(js)
         }
     }
 
@@ -59,19 +102,25 @@ interface BaseSource : JsExtensions {
      * 解析header规则
      */
     fun getHeaderMap(hasLoginHeader: Boolean = false) = HashMap<String, String>().apply {
-        this[AppConst.UA_NAME] = AppConfig.userAgent
         header?.let {
-            GSON.fromJsonObject<Map<String, String>>(
-                when {
-                    it.startsWith("@js:", true) ->
-                        evalJS(it.substring(4)).toString()
-                    it.startsWith("<js>", true) ->
-                        evalJS(it.substring(4, it.lastIndexOf("<"))).toString()
+            try {
+                val json = when {
+                    it.startsWith("@js:", true) -> evalJS(it.substring(4)).toString()
+                    it.startsWith("<js>", true) -> evalJS(
+                        it.substring(4, it.lastIndexOf("<"))
+                    ).toString()
+
                     else -> it
                 }
-            ).getOrNull()?.let { map ->
-                putAll(map)
+                GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
+                    putAll(map)
+                }
+            } catch (e: Exception) {
+                AppLog.put("执行请求头规则出错\n$e", e)
             }
+        }
+        if (!has(AppConst.UA_NAME, true)) {
+            put(AppConst.UA_NAME, AppConfig.userAgent)
         }
         if (hasLoginHeader) {
             getLoginHeaderMap()?.let {
@@ -117,10 +166,7 @@ interface BaseSource : JsExtensions {
         try {
             val key = AppConst.androidId.encodeToByteArray(0, 16)
             val cache = CacheManager.get("userInfo_${getKey()}") ?: return null
-            val encodeBytes = Base64.decode(cache, Base64.DEFAULT)
-            val decodeBytes = EncoderUtils.decryptAES(encodeBytes, key)
-                ?: return null
-            return String(decodeBytes)
+            return AES(key).decryptStr(cache)
         } catch (e: Exception) {
             AppLog.put("获取登陆信息出错", e)
             return null
@@ -137,8 +183,7 @@ interface BaseSource : JsExtensions {
     fun putLoginInfo(info: String): Boolean {
         return try {
             val key = (AppConst.androidId).encodeToByteArray(0, 16)
-            val encodeBytes = EncoderUtils.encryptAES(info.toByteArray(), key)
-            val encodeStr = Base64.encodeToString(encodeBytes, Base64.DEFAULT)
+            val encodeStr = SymmetricCryptoAndroid("AES", key).encryptBase64(info)
             CacheManager.put("userInfo_${getKey()}", encodeStr)
             true
         } catch (e: Exception) {
@@ -151,6 +196,10 @@ interface BaseSource : JsExtensions {
         CacheManager.delete("userInfo_${getKey()}")
     }
 
+    /**
+     * 设置自定义变量
+     * @param variable 变量内容
+     */
     fun setVariable(variable: String?) {
         if (variable != null) {
             CacheManager.put("sourceVariable_${getKey()}", variable)
@@ -159,22 +208,49 @@ interface BaseSource : JsExtensions {
         }
     }
 
-    fun getVariable(): String? {
-        return CacheManager.get("sourceVariable_${getKey()}")
+    /**
+     * 获取自定义变量
+     */
+    fun getVariable(): String {
+        return CacheManager.get("sourceVariable_${getKey()}") ?: ""
+    }
+
+    /**
+     * 保存数据
+     */
+    fun put(key: String, value: String): String {
+        CacheManager.put("v_${getKey()}_${key}", value)
+        return value
+    }
+
+    /**
+     * 获取保存的数据
+     */
+    fun get(key: String): String {
+        return CacheManager.get("v_${getKey()}_${key}") ?: ""
     }
 
     /**
      * 执行JS
      */
     @Throws(Exception::class)
-    fun evalJS(jsStr: String, bindingsConfig: SimpleBindings.() -> Unit = {}): Any? {
-        val bindings = SimpleBindings()
-        bindings.apply(bindingsConfig)
-        bindings["java"] = this
-        bindings["source"] = this
-        bindings["baseUrl"] = getKey()
-        bindings["cookie"] = CookieStore
-        bindings["cache"] = CacheManager
-        return AppConst.SCRIPT_ENGINE.eval(jsStr, bindings)
+    fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
+        val bindings = buildScriptBindings { bindings ->
+            bindings.apply(bindingsConfig)
+            bindings["java"] = this
+            bindings["source"] = this
+            bindings["baseUrl"] = getKey()
+            bindings["cookie"] = CookieStore
+            bindings["cache"] = CacheManager
+        }
+        val scope = RhinoScriptEngine.getRuntimeScope(bindings)
+        getShareScope()?.let {
+            scope.prototype = it
+        }
+        return RhinoScriptEngine.eval(jsStr, scope)
+    }
+
+    fun getShareScope(): Scriptable? {
+        return SharedJsScope.getScope(jsLib)
     }
 }

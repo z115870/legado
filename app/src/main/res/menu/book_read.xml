@@ -29,7 +29,7 @@
         <item
             android:id="@+id/menu_toc_regex"
             android:icon="@drawable/ic_exchange"
-            android:title="@string/txt_toc_regex"
+            android:title="@string/txt_toc_rule"
             android:visible="false"
             app:showAsAction="always" />
     </group>
@@ -66,23 +66,66 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_cover_progress"
+        android:title="@string/cover_book_progress"
+        android:visible="false"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_reverse_content"
         android:title="@string/reverse_content"
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_simulated_reading"
+        android:title="@string/simulated_reading"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_enable_replace"
-        android:title="@string/replace_rule_title"
         android:checkable="true"
         android:checked="true"
+        android:title="@string/replace_rule_title"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_same_title_removed"
+        android:checkable="true"
+        android:title="@string/same_title_removed"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/menu_re_segment"
-        android:title="@string/re_segment"
         android:checkable="true"
         android:checked="false"
+        android:title="@string/re_segment"
         app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_enable_review"
+        android:checkable="true"
+        android:checked="false"
+        android:title="@string/review"
+        android:visible="false"
+        app:showAsAction="never" />
+
+    <group android:id="@+id/menu_group_epub">
+
+        <item
+            android:id="@+id/menu_del_ruby_tag"
+            android:checkable="true"
+            android:checked="false"
+            android:title="@string/del_ruby_tag"
+            app:showAsAction="never" />
+
+        <item
+            android:id="@+id/menu_del_h_tag"
+            android:checkable="true"
+            android:checked="false"
+            android:title="@string/del_h_tag"
+            app:showAsAction="never" />
+
+    </group>
 
     <item
         android:id="@+id/menu_image_style"
@@ -92,6 +135,11 @@
     <item
         android:id="@+id/menu_update_toc"
         android:title="@string/update_toc"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_effective_replaces"
+        android:title="@string/effective_replaces"
         app:showAsAction="never" />
 
     <item

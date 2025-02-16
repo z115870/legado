@@ -49,8 +49,8 @@
 	<string-array name="screen_time_out">
 		<item>Padrão</item>
 		<item>1 min</item>
-		<item>2 min</item>
-		<item>3 min</item>
+		<item>5 min</item>
+		<item>10 min</item>
 		<item>Sempre</item>
 	</string-array>
 
@@ -59,6 +59,7 @@
 		<item>@string/screen_portrait</item>
 		<item>@string/screen_landscape</item>
 		<item>@string/screen_sensor</item>
+		<item>@string/screen_portrait_reversed</item>
 	</string-array>
 
 	<string-array name="icon_names">
@@ -91,7 +92,8 @@
 		<item>Bateria</item>
 		<item>Bateria%</item>
 		<item>Páginas</item>
-		<item>Progresso</item>
+		<item>Progresso(%)</item>
+		<item>Progresso(xx/yyy)</item>
 		<item>Páginas e progresso</item>
 		<item>Tempo e Bateria</item>
 		<item>Tempo e Bateria%</item>

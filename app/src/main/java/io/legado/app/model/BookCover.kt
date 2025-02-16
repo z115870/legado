@@ -4,10 +4,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import androidx.annotation.Keep
 import com.bumptech.glide.RequestBuilder
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.bumptech.glide.request.RequestOptions
+import com.bumptech.glide.request.target.Target.SIZE_ORIGINAL
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.BaseSource
@@ -20,9 +23,14 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.utils.*
+import io.legado.app.utils.BitmapUtils
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.getPrefString
 import splitties.init.appCtx
 
+@Keep
 object BookCover {
 
     private const val coverRuleConfigKey = "legadoCoverRuleConfig"
@@ -32,9 +40,7 @@ object BookCover {
         private set
     lateinit var defaultDrawable: Drawable
         private set
-    var coverRuleConfig: CoverRuleConfig =
-        GSON.fromJsonObject<CoverRuleConfig>(CacheManager.get(coverRuleConfigKey)).getOrNull()
-            ?: DefaultData.coverRuleConfig
+
 
     init {
         upDefaultCover()
@@ -71,7 +77,7 @@ object BookCover {
         context: Context,
         path: String?,
         loadOnlyWifi: Boolean = false,
-        sourceOrigin: String? = null
+        sourceOrigin: String? = null,
     ): RequestBuilder<Drawable> {
         if (AppConfig.useDefaultCover) {
             return ImageLoader.load(context, defaultDrawable)
@@ -89,13 +95,37 @@ object BookCover {
     }
 
     /**
+     * 加载漫画图片
+     */
+    fun loadManga(
+        context: Context,
+        path: String?,
+        loadOnlyWifi: Boolean = false,
+        sourceOrigin: String? = null,
+        manga: Boolean = false,
+        useDefaultCover: Drawable? = null,
+    ): RequestBuilder<Drawable> {
+        var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)
+            .set(OkHttpModelLoader.mangaOption, manga)
+        if (sourceOrigin != null) {
+            options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
+        }
+        return ImageLoader.load(context, path)
+            .apply(options)
+            .override(context.resources.displayMetrics.widthPixels, SIZE_ORIGINAL)
+            .placeholder(useDefaultCover)
+            .error(useDefaultCover)
+            .diskCacheStrategy(DiskCacheStrategy.ALL)
+    }
+
+    /**
      * 加载模糊封面
      */
     fun loadBlur(
         context: Context,
         path: String?,
         loadOnlyWifi: Boolean = false,
-        sourceOrigin: String? = null
+        sourceOrigin: String? = null,
     ): RequestBuilder<Drawable> {
         val loadBlur = ImageLoader.load(context, defaultDrawable)
             .transform(BlurTransformation(25), CenterCrop())
@@ -113,8 +143,14 @@ object BookCover {
             .thumbnail(loadBlur)
     }
 
+    fun getCoverRule(): CoverRule {
+        return GSON.fromJsonObject<CoverRule>(CacheManager.get(coverRuleConfigKey))
+            .getOrNull()
+            ?: DefaultData.coverRule
+    }
+
     suspend fun searchCover(book: Book): String? {
-        val config = coverRuleConfig
+        val config = getCoverRule()
         if (!config.enable || config.searchUrl.isBlank() || config.coverRule.isBlank()) {
             return null
         }
@@ -131,18 +167,17 @@ object BookCover {
         return analyzeRule.getString(config.coverRule, isUrl = true)
     }
 
-    fun saveCoverRuleConfig(config: CoverRuleConfig) {
-        coverRuleConfig = config
+    fun saveCoverRule(config: CoverRule) {
         val json = GSON.toJson(config)
         CacheManager.put(coverRuleConfigKey, json)
     }
 
-    fun delCoverRuleConfig() {
+    fun delCoverRule() {
         CacheManager.delete(coverRuleConfigKey)
-        coverRuleConfig = DefaultData.coverRuleConfig
     }
 
-    data class CoverRuleConfig(
+    @Keep
+    data class CoverRule(
         var enable: Boolean = true,
         var searchUrl: String,
         var coverRule: String,
@@ -150,6 +185,7 @@ object BookCover {
         override var loginUrl: String? = null,
         override var loginUi: String? = null,
         override var header: String? = null,
+        override var jsLib: String? = null,
         override var enabledCookieJar: Boolean? = false,
     ) : BaseSource {
 

@@ -4,8 +4,8 @@ import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.runner.AndroidJUnit4
 import io.legado.app.data.AppDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -14,13 +14,14 @@ import java.io.IOException
 
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
+
     private val TEST_DB = "migration-test"
 
     private val ALL_MIGRATIONS = arrayOf<Migration>(
 
     )
 
-    @Rule
+    @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
         AppDatabase::class.java.canonicalName,
@@ -31,7 +32,7 @@ class MigrationTest {
     @Throws(IOException::class)
     fun migrateAll() {
         // Create earliest version of the database.
-        helper.createDatabase(TEST_DB, 30).apply {
+        helper.createDatabase(TEST_DB, 50).apply {
             close()
         }
 
